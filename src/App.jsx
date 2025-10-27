@@ -2,6 +2,7 @@ import { useState } from 'react'
 import './App.css'
 import Navbar from './components/Navbar'
 import AuthModal from './components/AuthModal'
+import GradeTracker from "./components/GradeTracker";
 
 function App() {
   const [authMode, setAuthMode] = useState(null) // 'login' | 'signup' | null
@@ -19,11 +20,10 @@ function App() {
   }
 
   return (
-    <div className="app-root">
+<div className="app-root">
       <Navbar onShowAuth={openAuth} />
       <main className="container mt-5">
-        <h2>Welcome to SyllaScribe</h2>
-        <p>This is a placeholder main area. Use the Log in / Sign up buttons to open the forms.</p>
+        <GradeTracker /> {/* gradetracker for signed out users */}
       </main>
       <AuthModal 
         mode={authMode} 
