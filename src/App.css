@@ -4,10 +4,6 @@
   background-color: #f8f9fa;
 }
 
-.container {
-  padding-top: 2rem;
-}
-
 /* Responsive navbar padding - scales smoothly with screen size */
 .navbar .container-fluid {
   padding-left: clamp(1rem, 3vw, 3rem);
