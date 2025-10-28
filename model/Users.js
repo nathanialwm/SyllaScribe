@@ -11,6 +11,7 @@ const userSchema = new Schema({
     settings: [{
         darkMode: {type: Boolean, default: false},
         notifications: {type: Boolean, default: true}, 
+        admin: {type: Boolean, default: false}
     }]
 });
 

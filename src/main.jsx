@@ -5,7 +5,10 @@ import './index.css'
 import App from './App.jsx'
 import mongoose from 'mongoose'
 
-mongoose.connect('mongodb+srv://admin:418Yadmin@scribecluster.ts78qln.mongodb.net/?appName=ScribeCluster');
+const { loadEnvFile } = require('node:process');
+loadEnvFile('.env');
+
+mongoose.connect(process.env.MONGO_URI);
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
