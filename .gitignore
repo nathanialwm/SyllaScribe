@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 eslint.config.js
+.env
 
 # Editor directories and files
 .vscode/*
