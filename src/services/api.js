@@ -15,6 +15,7 @@ const fetchWithAuth = async (url, options = {}) => {
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+    headers["HTTP-Referer"] = process.env.SITE_URL || "http://localhost:5173";
   }
 
   const response = await fetch(url, {
@@ -148,5 +149,59 @@ export const enrollmentsAPI = {
     return fetchWithAuth(`${API_BASE_URL}/enrollments/${id}`, {
       method: 'DELETE',
     });
+  }
+};
+
+// AI API
+export const aiAPI = {
+  // Test the AI connection with a simple message
+  test: async (message) => {
+    return fetchWithAuth(`${API_BASE_URL}/ai/test`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  },
+
+  // Analyze an image with AI vision
+  analyzeImage: async (imageUrl, prompt = "What is in this image?") => {
+    return fetchWithAuth(`${API_BASE_URL}/ai/analyze-image`, {
+      method: 'POST',
+      body: JSON.stringify({ imageUrl, prompt }),
+    });
+  },
+
+  // Send a chat message to AI
+  chat: async (messages, model = "openai/gpt-3.5-turbo") => {
+    return fetchWithAuth(`${API_BASE_URL}/ai/chat`, {
+      method: 'POST',
+      body: JSON.stringify({ messages, model }),
+    });
+  },
+
+  // Parse syllabus from file upload (no authentication required)
+  parseSyllabus: async (file) => {
+    const formData = new FormData();
+    formData.append('syllabus', file);
+
+    const token = localStorage.getItem('authToken');
+    const headers = {};
+
+    // Include auth token if user is logged in (for future course checking)
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}/ai/parse-syllabus`, {
+      method: 'POST',
+      headers: headers,
+      body: formData
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Failed to parse syllabus' }));
+      throw new Error(error.error || error.details || 'Failed to parse syllabus');
+    }
+
+    return response.json();
   }
 };
