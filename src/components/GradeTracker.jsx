@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import "./GradeTracker.css";  
+import "./GradeTracker.css";
 import "bootstrap/dist/css/bootstrap.min.css";
-import { Trash2 } from "lucide-react";
+import { Trash2, Upload, FileText, X } from "lucide-react";
+import { aiAPI, coursesAPI, enrollmentsAPI } from '../services/api';
 
 
 
@@ -9,6 +10,14 @@ function GradeTracker() {
   const [className, setClassName] = useState("");
   const [gradedAreas, setGradedAreas] = useState([]);
   const [finalGrade, setFinalGrade] = useState(null);
+
+  // Syllabus upload states
+  const [syllabusFile, setSyllabusFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [parseError, setParseError] = useState("");
+  const [parsedData, setParsedData] = useState(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [instructor, setInstructor] = useState("");
 
   const UpdateAreaName = (index, value) => {
     setGradedAreas(prev =>
@@ -110,10 +119,283 @@ const addGradedArea = () => {
   }
  };
 
+ // Handle syllabus file selection
+ const handleFileSelect = (e) => {
+   const file = e.target.files[0];
+   if (file) {
+     setSyllabusFile(file);
+     setParseError("");
+   }
+ };
+
+ // Upload and parse syllabus
+ const handleSyllabusUpload = async () => {
+   if (!syllabusFile) {
+     setParseError("Please select a file first");
+     return;
+   }
+
+   setUploading(true);
+   setParseError("");
+
+   try {
+     const result = await aiAPI.parseSyllabus(syllabusFile);
+
+     if (result.success) {
+       setParsedData(result.data);
+       setShowPreview(true);
+
+       // Show warnings if any
+       if (result.data.warnings && result.data.warnings.length > 0) {
+         setParseError(`Parsed successfully with warnings: ${result.data.warnings.join(', ')}`);
+       }
+     }
+   } catch (error) {
+     setParseError(error.message);
+   } finally {
+     setUploading(false);
+   }
+ };
+
+ // Apply parsed data to form
+ const applyParsedData = () => {
+   if (!parsedData) return;
+
+   setClassName(parsedData.className);
+   setInstructor(parsedData.instructor);
+
+   // Convert parsed categories to gradedAreas format
+   const newGradedAreas = parsedData.categories.map(category => ({
+     name: category.name,
+     weight: category.weight.toString(),
+     isOpen: false,
+     items: category.assignments.map(assignment => ({
+       name: assignment.name,
+       grade: "0" // Start with 0 as requested
+     }))
+   }));
+
+   setGradedAreas(newGradedAreas);
+   setShowPreview(false);
+   setParsedData(null);
+   setSyllabusFile(null);
+ };
+
+ // Cancel preview
+ const cancelPreview = () => {
+   setShowPreview(false);
+   setParsedData(null);
+   setSyllabusFile(null);
+   setParseError("");
+ };
+
+ // Update parsed data in preview
+ const updateParsedCategory = (catIndex, field, value) => {
+   setParsedData(prev => ({
+     ...prev,
+     categories: prev.categories.map((cat, i) =>
+       i === catIndex ? { ...cat, [field]: value } : cat
+     )
+   }));
+ };
+
+ const updateParsedAssignment = (catIndex, assignIndex, field, value) => {
+   setParsedData(prev => ({
+     ...prev,
+     categories: prev.categories.map((cat, i) => {
+       if (i !== catIndex) return cat;
+       return {
+         ...cat,
+         assignments: cat.assignments.map((assign, j) =>
+           j === assignIndex ? { ...assign, [field]: value } : assign
+         )
+       };
+     })
+   }));
+ };
+
+ const deleteParsedCategory = (catIndex) => {
+   setParsedData(prev => ({
+     ...prev,
+     categories: prev.categories.filter((_, i) => i !== catIndex)
+   }));
+ };
+
+ const deleteParsedAssignment = (catIndex, assignIndex) => {
+   setParsedData(prev => ({
+     ...prev,
+     categories: prev.categories.map((cat, i) => {
+       if (i !== catIndex) return cat;
+       return {
+         ...cat,
+         assignments: cat.assignments.filter((_, j) => j !== assignIndex)
+       };
+     })
+   }));
+ };
+
   return (
     <div className="Grade-tracker">
       <h1>Syllascribe</h1>
       <p>Track and calculate your grades easily!</p>
+
+      {/* Syllabus Upload Section */}
+      <div className="card mb-4">
+        <div className="card-header bg-primary text-white">
+          <h5 className="mb-0">Add Syllabus Here for AI Parsing</h5>
+        </div>
+        <div className="card-body">
+          <div className="mb-3">
+            <label className="btn btn-outline-primary d-inline-flex align-items-center mb-2" style={{ cursor: uploading || showPreview ? 'not-allowed' : 'pointer' }}>
+              Choose File <Upload size={16} className="ms-2" />
+              <input
+                type="file"
+                className="d-none"
+                accept=".pdf,image/*"
+                onChange={handleFileSelect}
+                disabled={uploading || showPreview}
+              />
+            </label>
+            <small className="text-muted d-block">Upload a PDF or image of your syllabus</small>
+          </div>
+
+          {syllabusFile && !showPreview && (
+            <div className="d-flex align-items-center mb-3">
+              <FileText size={16} className="me-1" />
+              <small className="text-truncate">{syllabusFile.name}</small>
+            </div>
+          )}
+
+          {parseError && (
+            <div className={`alert ${parseError.includes('warnings') ? 'alert-warning' : 'alert-danger'}`}>
+              {parseError}
+            </div>
+          )}
+
+          <button
+            className="btn btn-primary"
+            onClick={handleSyllabusUpload}
+            disabled={!syllabusFile || uploading || showPreview}
+          >
+            {uploading ? (
+              <>
+                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Parsing Syllabus...
+              </>
+            ) : (
+              'Parse Syllabus'
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Preview Modal/Section */}
+      {showPreview && parsedData && (
+        <div className="card mb-4 border-success">
+          <div className="card-header bg-success text-white d-flex justify-content-between align-items-center">
+            <h5 className="mb-0">Preview Parsed Data</h5>
+            <button className="btn btn-sm btn-light" onClick={cancelPreview}>
+              <X size={16} />
+            </button>
+          </div>
+          <div className="card-body">
+            <div className="mb-3">
+              <label className="form-label fw-bold">Class Name:</label>
+              <input
+                type="text"
+                className="form-control"
+                value={parsedData.className}
+                onChange={(e) => setParsedData({ ...parsedData, className: e.target.value })}
+              />
+            </div>
+
+            <div className="mb-3">
+              <label className="form-label fw-bold">Instructor:</label>
+              <input
+                type="text"
+                className="form-control"
+                value={parsedData.instructor}
+                onChange={(e) => setParsedData({ ...parsedData, instructor: e.target.value })}
+              />
+            </div>
+
+            <h6 className="fw-bold mt-4">Grade Categories:</h6>
+            {parsedData.categories.map((category, catIndex) => (
+              <div key={catIndex} className="card mb-3">
+                <div className="card-body">
+                  <div className="d-flex justify-content-between align-items-start mb-2">
+                    <div className="flex-grow-1 me-2">
+                      <input
+                        type="text"
+                        className="form-control form-control-sm mb-2"
+                        placeholder="Category Name"
+                        value={category.name}
+                        onChange={(e) => updateParsedCategory(catIndex, 'name', e.target.value)}
+                      />
+                      <input
+                        type="number"
+                        className="form-control form-control-sm"
+                        placeholder="Weight %"
+                        value={category.weight}
+                        onChange={(e) => updateParsedCategory(catIndex, 'weight', e.target.value)}
+                        min="0"
+                        max="100"
+                      />
+                    </div>
+                    <button
+                      className="btn btn-sm btn-danger"
+                      onClick={() => deleteParsedCategory(catIndex)}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+
+                  <div className="ms-3">
+                    <small className="fw-bold text-muted">Assignments:</small>
+                    {category.assignments.map((assignment, assignIndex) => (
+                      <div key={assignIndex} className="d-flex align-items-center mt-2">
+                        <input
+                          type="text"
+                          className="form-control form-control-sm me-2"
+                          placeholder="Assignment Name"
+                          value={assignment.name}
+                          onChange={(e) => updateParsedAssignment(catIndex, assignIndex, 'name', e.target.value)}
+                        />
+                        <button
+                          className="btn btn-sm btn-outline-danger"
+                          onClick={() => deleteParsedAssignment(catIndex, assignIndex)}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {parsedData.warnings && parsedData.warnings.length > 0 && (
+              <div className="alert alert-warning mt-3">
+                <strong>Warnings:</strong>
+                <ul className="mb-0 mt-2">
+                  {parsedData.warnings.map((warning, i) => (
+                    <li key={i}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="d-flex gap-2 mt-4">
+              <button className="btn btn-success" onClick={applyParsedData}>
+                Apply to Grade Tracker
+              </button>
+              <button className="btn btn-secondary" onClick={cancelPreview}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <label htmlFor="Classname">Class Name: </label>
       <input

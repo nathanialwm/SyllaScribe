@@ -14,6 +14,10 @@ dist-ssr
 eslint.config.js
 .env
 
+# Uploaded files (temporary)
+server/uploads/*
+!server/uploads/.gitkeep
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
