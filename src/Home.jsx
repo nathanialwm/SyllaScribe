@@ -14,6 +14,9 @@ function Home() {
     localStorage.removeItem('currentUser');
     window.location.reload();
   }
+  function handleSettings() {
+    alert("Settings feature coming soon!");
+  }
  
    useEffect(() => {
     const fetchCourses = async () => {
@@ -37,7 +40,7 @@ function Home() {
        <nav className="navbar navbar-expand-lg navbar-dark bg-primary">
       <div className="container-fluid px-3 px-md-4 px-lg-5">
         <a className="navbar-brand fw-bold fs-4" href="#" onClick={(e) => e.preventDefault()}>
-          SyllaScribe
+          Welcome to SyllaScribe {localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser')).name : ' '}
         </a>
         <button 
           className="navbar-toggler" 
@@ -52,7 +55,12 @@ function Home() {
         </button>
         <div className="collapse navbar-collapse justify-content-end" id="navbarNav">
           <div className="d-flex gap-2">
-           
+           <button 
+              className="btn btn-outline-light"
+              onClick={() => handleSettings()}
+            >
+              Settings
+            </button>
             <button 
               className="btn btn-light"
               onClick={() =>handleSignOut()}
