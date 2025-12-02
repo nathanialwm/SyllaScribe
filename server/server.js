@@ -24,7 +24,7 @@ import authRoutes from './routes/auth.js';
 import courseRoutes from './routes/courses.js';
 import enrollmentRoutes from './routes/enrollments.js';
 import aiRoutes from './routes/ai.js';
-
+import User from './models/User.js';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -51,3 +51,125 @@ app.get('/api/health', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+app.post('/createUser', async (req, res) => {
+  try {
+    const { email, password, name} = req.body;
+
+    // Validate required fields
+    if (!email || !password || !name) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email, password, and name are required fields'
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      console.log("Username already exists")
+      return res.status(409).json({ 
+    success: false,
+    message: 'Email already exists'
+  });
+    }
+
+  
+  const newUser = new User({
+  email,
+  password,
+  name
+  
+});
+
+    // Save to database
+    const savedUser = await newUser.save();
+
+    // Remove password from response for security
+    const userResponse = savedUser.toObject();
+    delete userResponse.password;
+
+    // Return success response
+    res.status(201).json({
+      success: true,
+      message: 'User created successfully',
+      user: userResponse
+    });
+
+  } catch (error) {
+    console.error('Error creating user:', error);
+
+    // Handle Mongoose validation errors
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors: Object.values(error.errors).map(err => err.message)
+      });
+    }
+
+    // Handle duplicate key error (unique constraint)
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: 'Email already exists'
+      });
+    }
+
+    // Generic server error
+    res.status(500).json({
+      success: false,
+      message: 'Server error while creating user',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+app.post('/getUser', async (req, res) => {
+  try {
+    const { email, password } = req.body; 
+    
+    // Validate required fields
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password are required'
+      });
+    }
+
+    // Find user by email
+    const user = await User.findOne({ email: email });
+    
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password'
+      });
+    }
+
+    // If you're NOT using bcrypt hashing (plain text passwords):
+    if (user.password === password) {
+      // Remove password from response
+      const userResponse = user.toObject();
+      delete userResponse.password;
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Login successful',
+        user: userResponse
+      });
+    } else {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password'
+      });
+    }
+
+  } catch (error) {
+    console.error('Login error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error during login',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+})
