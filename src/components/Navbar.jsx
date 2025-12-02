@@ -1,6 +1,6 @@
 import React from 'react';
 import { Sun, Moon } from 'lucide-react';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme } from './ThemeContext';
 
 export default function Navbar({ onShowAuth }) {
   // Grabs theme state & toggle method from ThemeContext.
