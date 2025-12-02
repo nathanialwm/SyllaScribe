@@ -7,6 +7,7 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [termsAgree, setTermsAgree] = useState(false);
   const [remeber, setRemeber] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   
   const handleSignUp = async (event, name, email, confirmPassword, password, termsAgree ) => {
      event.preventDefault(); 
@@ -39,10 +40,15 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
     try {
       const response = await axios.post('http://localhost:5000/createUser', {name, email, password})
       if (response.data.success) {
-        alert("Sign up successful!");
-        onClose();
-        localStorage.setItem('currentUser', JSON.stringify(response.data.user));
-        window.location.reload(); 
+        // Clear form fields
+        setName('');
+        setEmail('');
+        setPassword('');
+        setConfirmPassword('');
+        setTermsAgree(false);
+        // Switch to login mode with success message
+        setSuccessMessage('Sign up successful, please log in');
+        onSwitchMode('login');
       } else {
         alert(response.data.message || "Sign up failed");
       }
@@ -55,10 +61,10 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
     try {
       const response = await axios.post('http://localhost:5000/getUser', { email, password})
       if (response.data.success) {
-        alert("Sign in successful!");
-        onClose();
+        // No alert - just proceed with login
         localStorage.setItem('currentUser', JSON.stringify(response.data.user));
-        window.location.reload(); 
+        onClose();
+        window.location.reload();
       } else {
         alert(response.data.message || "Sign in failed");
       }
@@ -90,6 +96,11 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
               {mode === 'login' ? (
                 <div>
                   <h4 className="mb-4">Login to SyllaScribe</h4>
+                  {successMessage && (
+                    <div className="alert alert-success" role="alert">
+                      {successMessage}
+                    </div>
+                  )}
                   <form>
                     <div className="mb-3">
                       <label htmlFor="loginEmail" className="form-label">Email address</label>
@@ -127,7 +138,10 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
                       <button
                         type="button"
                         className="btn btn-link p-0"
-                        onClick={() => onSwitchMode('signup')}
+                        onClick={() => {
+                          setSuccessMessage('');
+                          onSwitchMode('signup');
+                        }}
                       >
                         Sign up here
                       </button>
@@ -199,7 +213,10 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
                       <button
                         type="button"
                         className="btn btn-link p-0"
-                        onClick={() => onSwitchMode('login')}
+                        onClick={() => {
+                          setSuccessMessage('');
+                          onSwitchMode('login');
+                        }}
                       >
                         Login here
                       </button>
