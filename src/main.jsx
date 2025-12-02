@@ -5,8 +5,10 @@ import 'bootstrap/dist/js/bootstrap.bundle.min.js'
 import './index.css'
 import Choice from './Choice.jsx'
 
-const currentUser = localStorage.getItem('currentUser');
-const parsedUser = currentUser ? JSON.parse(currentUser) : null;
+const local = localStorage.getItem('currentUser');
+const sys = sessionStorage.getItem('currentUser');
+const currentUser = local ? local : sys;
+const parsedUser = currentUser ? JSON.parse(currentUser) : sys;
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <Choice user ={parsedUser} />
