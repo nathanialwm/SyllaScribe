@@ -1,17 +1,37 @@
-import { useState } from 'react'
 
+import { useState, useEffect } from 'react'  
+import axios from 'axios' 
 import Navbar from './components/Navbar'
 import AuthModal from './components/AuthModal'
 import GradeTracker from "./components/GradeTracker";
 
 function Home() {
-  const [authMode, setAuthMode] = useState(null) // 'login' | 'signup' | null
+  const [courses, setCourses] = useState([])
+  const [sectionTitle, setSectionTitle] = useState('Add New Class');
+   const [loading, setLoading] = useState(false) 
+  const [error, setError] = useState(null)  
   function handleSignOut() {
     localStorage.removeItem('currentUser');
     window.location.reload();
   }
  
-
+   useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        setLoading(true)
+        const response = await axios.get('http://localhost:5000/getCourses')
+        setCourses(response.data)
+        setError(null)
+      } catch (err) {
+        setError('Failed to load courses')
+        console.error('Error fetching courses:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    fetchCourses()
+  }, [])
   return (
 <div className="app-root">
        <nav className="navbar navbar-expand-lg navbar-dark bg-primary">
@@ -43,8 +63,38 @@ function Home() {
         </div>
       </div>
     </nav>
-      <main className="container mt-5">
-       
+       <main className="container-fluid mt-4">
+       <div className="row">
+          {/* Left Section - Empty */}
+          <div className="col-md-6">
+            <div className="card shadow-sm border">
+              <div className="card-header bg-light">
+                 <h5 className="mb-0">Classes ({courses.length})</h5>
+                {loading && (
+                  <div className="spinner-border spinner-border-sm text-primary" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                )}
+              
+              </div>
+              <div className="card-body">
+                {/* Empty - Add content later */}
+              </div>
+            </div>
+          </div>
+          
+          {/* Right Section - Empty */}
+          <div className="col-md-6">
+            <div className="card shadow-sm border">
+              <div className="card-header bg-light">
+                <h5 className="mb-0">{sectionTitle}</h5>
+              </div>
+              <div className="card-body">
+                {GradeTracker()}
+              </div>
+            </div>
+          </div>
+        </div>
       </main>
       
     </div>

@@ -25,6 +25,7 @@ import courseRoutes from './routes/courses.js';
 import enrollmentRoutes from './routes/enrollments.js';
 import aiRoutes from './routes/ai.js';
 import User from './models/User.js';
+import Course from './models/Course.js';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -173,3 +174,30 @@ app.post('/getUser', async (req, res) => {
     });
   }
 })
+app.get('/getCourses', async (req, res) => {
+  try {
+    // Find all courses
+    const courses = await Course.find();
+    
+    if (!courses || courses.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No courses found'
+      });
+    }
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Courses retrieved successfully',
+      courses: courses
+    });
+
+  } catch (error) {
+    console.error('Get courses error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error while fetching courses',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
