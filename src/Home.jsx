@@ -1,8 +1,6 @@
 
 import { useState, useEffect } from 'react'  
 import axios from 'axios' 
-import Navbar from './components/Navbar'
-import AuthModal from './components/AuthModal'
 import GradeTracker from "./components/GradeTracker";
 
 function Home() {
