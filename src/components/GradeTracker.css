@@ -171,6 +171,52 @@ button:hover {
   text-align: center;
 }
 
+/* --- Dark Mode Styles --- */
+[data-theme="dark"] .Grade-tracker {
+  background-color: var(--card-bg);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .Grade-tracker p {
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .graded-area {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .graded-area-content {
+  border-left-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .area-name,
+[data-theme="dark"] .area-weight {
+  color: var(--text-primary);
+  border-bottom-color: var(--border-color);
+}
+
+[data-theme="dark"] .item-row input {
+  background-color: var(--input-bg);
+  border-color: var(--input-border);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .classname-input {
+  background-color: var(--input-bg);
+  border-color: var(--input-border);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .final-grade-display {
+  background-color: #1e5a3a;
+  border-color: #2d8f5a;
+  color: #b3ffd9;
+}
+
 /* --- Responsive --- */
 @media (max-width: 600px) {
   .Grade-tracker {

@@ -1,0 +1,27 @@
+.classes-dashboard {
+  padding: 1rem;
+}
+
+[data-theme="dark"] {
+  --bg-color: #1a1a1a;
+  --card-bg: #2d2d2d;
+  --text-color: #e0e0e0;
+  --border-color: #444;
+}
+
+[data-theme="dark"] .classes-dashboard {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  min-height: 100vh;
+}
+
+[data-theme="dark"] .card {
+  background-color: var(--card-bg);
+  border-color: var(--border-color);
+  color: var(--text-color);
+}
+
+[data-theme="dark"] .text-muted {
+  color: #aaa !important;
+}
+

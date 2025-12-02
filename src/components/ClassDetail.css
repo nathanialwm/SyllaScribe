@@ -1,0 +1,13 @@
+.class-detail {
+  padding: 1rem;
+}
+
+.assignment-row {
+  background-color: #f8f9fa;
+}
+
+[data-theme="dark"] .assignment-row {
+  background-color: #2d2d2d;
+  border-color: #444 !important;
+}
+

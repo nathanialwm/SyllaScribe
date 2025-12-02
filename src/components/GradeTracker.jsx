@@ -3,13 +3,18 @@ import "./GradeTracker.css";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { Trash2, Upload, FileText, X } from "lucide-react";
 import { aiAPI, coursesAPI, enrollmentsAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 
 
-function GradeTracker() {
+function GradeTracker({ onSave }) {
+  const { user } = useAuth();
   const [className, setClassName] = useState("");
   const [gradedAreas, setGradedAreas] = useState([]);
   const [finalGrade, setFinalGrade] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [instructor, setInstructor] = useState("");
+  const [semester, setSemester] = useState("");
 
   // Syllabus upload states
   const [syllabusFile, setSyllabusFile] = useState(null);
@@ -17,7 +22,6 @@ function GradeTracker() {
   const [parseError, setParseError] = useState("");
   const [parsedData, setParsedData] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
-  const [instructor, setInstructor] = useState("");
 
   const UpdateAreaName = (index, value) => {
     setGradedAreas(prev =>
@@ -151,18 +155,29 @@ const addGradedArea = () => {
        }
      }
    } catch (error) {
-     setParseError(error.message);
+     console.error('Syllabus parsing error:', error);
+     const errorMessage = error.message || 'Failed to parse syllabus. Please check your file and try again.';
+     setParseError(errorMessage);
+     
+     // Show more helpful error messages
+     if (errorMessage.includes('AI_KEY') || errorMessage.includes('AI service')) {
+       setParseError('AI service is not configured. Please add AI_KEY to your server .env file to use syllabus parsing.');
+     } else if (errorMessage.includes('PDF') || errorMessage.includes('pdf-parse')) {
+       setParseError('PDF parsing failed. Try converting your PDF to an image file (JPG/PNG) or ensure the PDF contains readable text.');
+     } else if (errorMessage.includes('empty') || errorMessage.includes('extract')) {
+       setParseError('Could not extract text from the file. Please ensure the file contains readable text.');
+     }
    } finally {
      setUploading(false);
    }
  };
 
- // Apply parsed data to form
+  // Apply parsed data to form
  const applyParsedData = () => {
    if (!parsedData) return;
 
-   setClassName(parsedData.className);
-   setInstructor(parsedData.instructor);
+   setClassName(parsedData.className || parsedData.title || '');
+   setInstructor(parsedData.instructor || '');
 
    // Convert parsed categories to gradedAreas format
    const newGradedAreas = parsedData.categories.map(category => ({
@@ -171,7 +186,7 @@ const addGradedArea = () => {
      isOpen: false,
      items: category.assignments.map(assignment => ({
        name: assignment.name,
-       grade: "0" // Start with 0 as requested
+       grade: "" // Start empty
      }))
    }));
 
@@ -221,18 +236,98 @@ const addGradedArea = () => {
    }));
  };
 
- const deleteParsedAssignment = (catIndex, assignIndex) => {
-   setParsedData(prev => ({
-     ...prev,
-     categories: prev.categories.map((cat, i) => {
-       if (i !== catIndex) return cat;
-       return {
-         ...cat,
-         assignments: cat.assignments.filter((_, j) => j !== assignIndex)
-       };
-     })
-   }));
- };
+  const deleteParsedAssignment = (catIndex, assignIndex) => {
+    setParsedData(prev => ({
+      ...prev,
+      categories: prev.categories.map((cat, i) => {
+        if (i !== catIndex) return cat;
+        return {
+          ...cat,
+          assignments: cat.assignments.filter((_, j) => j !== assignIndex)
+        };
+      })
+    }));
+  };
+
+  const handleSave = async () => {
+    if (!user) {
+      alert('Please log in to save classes');
+      return;
+    }
+
+    if (!className || gradedAreas.length === 0) {
+      alert('Please enter a class name and at least one graded area');
+      return;
+    }
+
+    // Validate weights sum to 100
+    const totalWeight = gradedAreas.reduce((sum, area) => sum + (parseFloat(area.weight) || 0), 0);
+    if (Math.abs(totalWeight - 100) > 0.01) {
+      if (!confirm(`Total weight is ${totalWeight}%, not 100%. Continue anyway?`)) {
+        return;
+      }
+    }
+
+    setSaving(true);
+    try {
+      // Convert gradedAreas to categories format
+      const categories = gradedAreas.map(area => ({
+        name: area.name,
+        weight: parseFloat(area.weight) || 0,
+        dropLowest: 0, // Can be set later
+        assignments: area.items.map(item => ({
+          name: item.name,
+          weight: 0, // Equal weight within category
+          maxScore: 100,
+          isParticipation: false
+        }))
+      }));
+
+      const courseData = {
+        title: className,
+        instructor: instructor || '',
+        semester: semester || '',
+        categories: categories,
+        latePolicy: {
+          type: 'none',
+          value: 0
+        }
+      };
+
+      const result = await coursesAPI.create(courseData);
+      const courseId = result.course?._id || result._id;
+      
+      // Create calendar events from parsed syllabus if available
+      if (parsedData?.calendarEvents && parsedData.calendarEvents.length > 0 && courseId) {
+        try {
+          const { calendarAPI } = await import('../services/api');
+          await calendarAPI.bulkCreate(parsedData.calendarEvents, courseId);
+          console.log(`Created ${parsedData.calendarEvents.length} calendar events from syllabus`);
+        } catch (calendarError) {
+          console.error('Failed to create calendar events:', calendarError);
+          // Don't fail the whole save if calendar creation fails
+        }
+      }
+      
+      alert('Class saved successfully!');
+      if (onSave) {
+        onSave();
+      }
+      
+      // Reset form
+      setClassName('');
+      setInstructor('');
+      setSemester('');
+      setGradedAreas([]);
+      setFinalGrade(null);
+      setParsedData(null);
+    } catch (error) {
+      console.error('Failed to save class:', error);
+      alert('Failed to save class: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="Grade-tracker">
@@ -385,8 +480,26 @@ const addGradedArea = () => {
               </div>
             )}
 
+            {/* Weight validation */}
+            {(() => {
+              const totalWeight = parsedData.categories.reduce((sum, cat) => sum + (parseFloat(cat.weight) || 0), 0);
+              const isValid = Math.abs(totalWeight - 100) < 0.01;
+              return (
+                <div className={`alert ${isValid ? 'alert-success' : 'alert-warning'} mt-3`}>
+                  Total Weight: {totalWeight.toFixed(2)}% {!isValid && '(Should be 100%)'}
+                </div>
+              );
+            })()}
+
             <div className="d-flex gap-2 mt-4">
-              <button className="btn btn-success" onClick={applyParsedData}>
+              <button 
+                className="btn btn-success" 
+                onClick={applyParsedData}
+                disabled={(() => {
+                  const totalWeight = parsedData.categories.reduce((sum, cat) => sum + (parseFloat(cat.weight) || 0), 0);
+                  return Math.abs(totalWeight - 100) > 0.01;
+                })()}
+              >
                 Apply to Grade Tracker
               </button>
               <button className="btn btn-secondary" onClick={cancelPreview}>
@@ -397,16 +510,47 @@ const addGradedArea = () => {
         </div>
       )}
 
-      <label htmlFor="Classname">Class Name: </label>
-      <input
-        type="text"
-        id="Classname"
-        className="classname-input"
-        name="Classname"
-        placeholder="Enter class name here."
-        value={className}
-        onChange={(e) => setClassName(e.target.value)}
-      />
+      <div className="mb-3">
+        <label htmlFor="Classname" className="form-label">Class Name: </label>
+        <input
+          type="text"
+          id="Classname"
+          className="form-control"
+          name="Classname"
+          placeholder="Enter class name here."
+          value={className}
+          onChange={(e) => setClassName(e.target.value)}
+        />
+      </div>
+      
+      {user && (
+        <>
+          <div className="mb-3">
+            <label htmlFor="Instructor" className="form-label">Instructor: </label>
+            <input
+              type="text"
+              id="Instructor"
+              className="form-control"
+              name="Instructor"
+              placeholder="Enter instructor name (optional)"
+              value={instructor}
+              onChange={(e) => setInstructor(e.target.value)}
+            />
+          </div>
+          <div className="mb-3">
+            <label htmlFor="Semester" className="form-label">Semester: </label>
+            <input
+              type="text"
+              id="Semester"
+              className="form-control"
+              name="Semester"
+              placeholder="e.g., Fall 2024 (optional)"
+              value={semester}
+              onChange={(e) => setSemester(e.target.value)}
+            />
+          </div>
+        </>
+      )}
       <br/>
       
       <button className="btn btn-primary m-1 add-area-btn" onClick={addGradedArea}>Add Area</button>
@@ -485,7 +629,13 @@ const addGradedArea = () => {
           <p className="d-flex justify-content-center align-items-center">No graded areas added yet.</p>
         )}
       </div>
-      <button className="btn btn-primary m-1 save-btn">Save</button> {/* Placeholder for future save functionality. If logged in will send to database otherwise prompt login/signup. */}
+      <button 
+        className="btn btn-primary m-1 save-btn"
+        onClick={handleSave}
+        disabled={saving || !className || gradedAreas.length === 0}
+      >
+        {saving ? 'Saving...' : 'Save Class'}
+      </button>
       <button className="btn btn-success m-1 calc-btn"
       onClick={calculateFinalGrade}
       >

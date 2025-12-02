@@ -8,32 +8,94 @@ import fs from 'fs';
 import Course from '../models/Course.js';
 
 const require = createRequire(import.meta.url);
-const pdfParseModule = require('pdf-parse');
-console.log('pdf-parse module type:', typeof pdfParseModule);
-console.log('pdf-parse module keys:', Object.keys(pdfParseModule));
-console.log('pdf-parse is function:', typeof pdfParseModule === 'function');
-console.log('pdf-parse.default type:', typeof pdfParseModule.default);
-// Handle both CommonJS default export and named export
-const pdfParse = typeof pdfParseModule === 'function' ? pdfParseModule : (pdfParseModule.default || pdfParseModule);
-console.log('Final pdfParse type:', typeof pdfParse);
+
+// Load pdf-parse - it's a CommonJS module
+// We'll load it dynamically when needed to avoid import issues
+const loadPdfParse = async () => {
+  try {
+    // Use the require function created at the top of the file
+    const pdfParseModule = require('pdf-parse');
+    
+    console.log('pdf-parse module type:', typeof pdfParseModule);
+    console.log('pdf-parse is function?', typeof pdfParseModule === 'function');
+    console.log('pdf-parse module keys:', Object.keys(pdfParseModule || {}));
+    console.log('pdf-parse module:', pdfParseModule);
+    
+    // pdf-parse v1.x exports: module.exports = function pdf(dataBuffer, options)
+    // So require() should return the function directly
+    if (typeof pdfParseModule === 'function') {
+      console.log('✓ pdf-parse is a function directly');
+      return pdfParseModule;
+    }
+    
+    // Sometimes wrapped in default (ES module interop)
+    if (pdfParseModule?.default && typeof pdfParseModule.default === 'function') {
+      console.log('✓ pdf-parse found in .default');
+      return pdfParseModule.default;
+    }
+    
+    // Or as a named export
+    if (pdfParseModule?.pdfParse && typeof pdfParseModule.pdfParse === 'function') {
+      console.log('✓ pdf-parse found in .pdfParse');
+      return pdfParseModule.pdfParse;
+    }
+    
+    // Check if it has a __esModule flag and default
+    if (pdfParseModule?.__esModule && pdfParseModule.default) {
+      console.log('✓ pdf-parse has __esModule, using default');
+      return pdfParseModule.default;
+    }
+    
+    // If it's an object, try to find any function property
+    if (typeof pdfParseModule === 'object' && pdfParseModule !== null) {
+      for (const key of Object.keys(pdfParseModule)) {
+        if (typeof pdfParseModule[key] === 'function') {
+          console.log(`✓ Found function in pdf-parse.${key}`);
+          return pdfParseModule[key];
+        }
+      }
+    }
+    
+    // Last resort - the module itself might be callable even if typeof says object
+    console.log('⚠ Using pdf-parse module directly (type check failed)');
+    return pdfParseModule;
+  } catch (error) {
+    console.error('Failed to load pdf-parse:', error);
+    throw new Error(`Failed to load pdf-parse module: ${error.message}`);
+  }
+};
 
 const router = express.Router();
 
-// Initialize OpenAI client with OpenRouter configuration
+// Lazy initialization of OpenAI client
+let openai = null;
+
+// Warn if AI_KEY is not set (but don't crash the server)
 if (!process.env.AI_KEY) {
-  console.error('ERROR: AI_KEY environment variable is not set!');
-  throw new Error('AI_KEY environment variable is required');
+  console.warn('⚠️  WARNING: AI_KEY environment variable is not set.');
+  console.warn('   The server will start, but AI features (syllabus parsing) will not work.');
+  console.warn('   To enable AI features, add AI_KEY to your .env file.');
 }
 
-const openai = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.AI_KEY,
-  defaultHeaders: {
-    "HTTP-Referer": process.env.SITE_URL || "http://localhost:5173",
-    "X-Title": process.env.SITE_NAME || "SyllaScribe",
-  },
-  dangerouslyAllowBrowser: false,
-});
+const getOpenAIClient = () => {
+  if (!process.env.AI_KEY) {
+    throw new Error('AI_KEY environment variable is not set. Please add it to your .env file to use AI features.');
+  }
+  
+  if (!openai) {
+    openai = new OpenAI({
+      baseURL: "https://openrouter.ai/api/v1",
+      apiKey: process.env.AI_KEY,
+      defaultHeaders: {
+        "HTTP-Referer": process.env.SITE_URL || "http://localhost:5173",
+        "X-Title": process.env.SITE_NAME || "SyllaScribe",
+      },
+      dangerouslyAllowBrowser: false,
+    });
+  }
+  
+  return openai;
+};
 
 // Test connection endpoint - simple text completion
 router.post('/test', authenticateToken, async (req, res) => {
@@ -44,7 +106,8 @@ router.post('/test', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    const completion = await openai.chat.completions.create({
+    const client = getOpenAIClient();
+    const completion = await client.chat.completions.create({
       model: "openai/gpt-3.5-turbo",
       messages: [
         {
@@ -78,7 +141,8 @@ router.post('/analyze-image', authenticateToken, async (req, res) => {
 
     const userPrompt = prompt || "What is in this image?";
 
-    const completion = await openai.chat.completions.create({
+    const client = getOpenAIClient();
+    const completion = await client.chat.completions.create({
       model: "openai/gpt-4-vision-preview",
       messages: [
         {
@@ -123,7 +187,8 @@ router.post('/chat', authenticateToken, async (req, res) => {
 
     const selectedModel = model || "openai/gpt-3.5-turbo";
 
-    const completion = await openai.chat.completions.create({
+    const client = getOpenAIClient();
+    const completion = await client.chat.completions.create({
       model: selectedModel,
       messages: messages
     });
@@ -164,11 +229,44 @@ router.post('/parse-syllabus', upload.single('syllabus'), async (req, res) => {
     // Handle PDF files
     if (fileType === 'application/pdf') {
       console.log('Processing PDF file...');
-      const dataBuffer = fs.readFileSync(filePath);
-      const pdfData = await pdfParse(dataBuffer);
-      contentForAI = pdfData.text;
-      console.log(`PDF extracted text length: ${contentForAI.length} characters`);
-      console.log(`PDF first 200 chars: ${contentForAI.substring(0, 200)}...`);
+      
+      try {
+        // Load pdf-parse dynamically
+        const pdfParseFunc = await loadPdfParse();
+        
+        console.log('pdfParseFunc type after load:', typeof pdfParseFunc);
+        
+        const dataBuffer = fs.readFileSync(filePath);
+        console.log('PDF buffer size:', dataBuffer.length);
+        
+        // Try to call it - sometimes CommonJS modules are callable even if typeof says 'object'
+        let pdfData;
+        try {
+          if (typeof pdfParseFunc === 'function') {
+            console.log('Calling pdfParseFunc as function...');
+            pdfData = await pdfParseFunc(dataBuffer);
+          } else {
+            // Try calling it anyway - some CommonJS modules are callable objects
+            console.log('Attempting to call pdfParseFunc (type: ' + typeof pdfParseFunc + ')...');
+            pdfData = await pdfParseFunc(dataBuffer);
+          }
+        } catch (callError) {
+          console.error('Error calling pdfParseFunc:', callError);
+          throw new Error(`Cannot call pdf-parse: ${callError.message}. Module type: ${typeof pdfParseFunc}`);
+        }
+        
+        contentForAI = pdfData?.text || '';
+        
+        if (!contentForAI || contentForAI.trim().length === 0) {
+          throw new Error('PDF file appears to be empty or could not extract text. The PDF might be image-based or corrupted.');
+        }
+        
+        console.log(`PDF extracted text length: ${contentForAI.length} characters`);
+        console.log(`PDF first 200 chars: ${contentForAI.substring(0, 200)}...`);
+      } catch (pdfError) {
+        console.error('PDF parsing error:', pdfError);
+        throw new Error(`Failed to parse PDF: ${pdfError.message}`);
+      }
     }
     // Handle image files - we'll use vision model
     else if (fileType.startsWith('image/')) {
@@ -183,10 +281,19 @@ router.post('/parse-syllabus', upload.single('syllabus'), async (req, res) => {
     // Construct the prompt for AI
     const systemPrompt = `Parse this syllabus to find information regarding grade breakdown, class name and instructor, for the course. Create categories from this information for each type of graded item, and add the weight of that category as supplied in the syllabus. If there is no weight information found, fill the weights in as 100/num_categories.
 
+ALSO extract all important dates including:
+- Exam dates (midterms, finals, quizzes)
+- Assignment due dates
+- Project deadlines
+- Important class events
+- Drop/add deadlines
+- Holiday/break dates
+
 You MUST return ONLY valid JSON in this exact format with no additional text:
 {
   "className": "string (REQUIRED)",
   "instructor": "string (REQUIRED)",
+  "semester": "string (optional - e.g., Fall 2024, Spring 2025)",
   "categories": [
     {
       "name": "string (e.g., Exams, Homework, Projects)",
@@ -194,9 +301,20 @@ You MUST return ONLY valid JSON in this exact format with no additional text:
       "assignments": [
         {
           "name": "string (e.g., Midterm Exam, Final Exam)",
-          "weight": number (percentage within category, or 0 if uniform)
+          "weight": number (percentage within category, or 0 if uniform),
+          "dueDate": "ISO 8601 date string (YYYY-MM-DD) or null if not found"
         }
       ]
+    }
+  ],
+  "calendarEvents": [
+    {
+      "title": "string (e.g., Midterm Exam, Assignment 1 Due)",
+      "description": "string (optional)",
+      "startDate": "ISO 8601 date string (YYYY-MM-DD) - REQUIRED",
+      "endDate": "ISO 8601 date string (YYYY-MM-DD) or null",
+      "eventType": "string (exam, assignment, homework, project, quiz, lecture, deadline, other)",
+      "isAllDay": boolean (default true for most academic events)
     }
   ],
   "warnings": ["string (optional - list any missing or partially found information)"]
@@ -207,14 +325,29 @@ Rules:
 - If no grade breakdown is found, return an error.
 - If partial grade information is found, include what you found and add warnings.
 - All weights should sum to 100. Unless it explicitly states extra credit.
-- If individual assignment weights aren't specified, use 0 for weight.`;
+- If individual assignment weights aren't specified, use 0 for weight.
+- Extract ALL dates mentioned in the syllabus, even if they don't have associated assignments.
+- For dates, use ISO 8601 format (YYYY-MM-DD). If only month/day is given, infer the year from the semester or use current year.
+- Include exam dates, assignment due dates, project deadlines, and any other important academic dates.`;
 
     let parsedData;
 
+    // Validate we have content to process
+    if (!contentForAI || contentForAI.trim().length === 0) {
+      throw new Error('Could not extract content from file. Please ensure the file is a valid PDF or image.');
+    }
+
     // Use vision model for images, text model for PDFs
+    let client;
+    try {
+      client = getOpenAIClient();
+    } catch (aiError) {
+      throw new Error(`AI service unavailable: ${aiError.message}`);
+    }
+    
     if (fileType.startsWith('image/')) {
       console.log('Sending image to Claude 3.5 Sonnet vision model...');
-      const completion = await openai.chat.completions.create({
+      const completion = await client.chat.completions.create({
         model: "openrouter/anthropic/claude-3.5-sonnet:beta",
         messages: [
           {
@@ -241,7 +374,7 @@ Rules:
     } else {
       // For PDF text
       console.log('Sending PDF text to Claude 3.5 Sonnet...');
-      const completion = await openai.chat.completions.create({
+      const completion = await client.chat.completions.create({
         model: "openrouter/anthropic/claude-3.5-sonnet:beta",
         messages: [
           {
@@ -336,9 +469,28 @@ Rules:
     console.error('Error type:', error.name);
     console.error('Error message:', error.message);
     console.error('Error stack:', error.stack);
-    res.status(500).json({
-      error: 'Failed to parse syllabus',
-      details: error.message
+    
+    // Provide more helpful error messages
+    let errorMessage = 'Failed to parse syllabus';
+    let statusCode = 500;
+    
+    if (error.message.includes('AI_KEY') || error.message.includes('AI service')) {
+      errorMessage = 'AI service is not configured. Please add AI_KEY to your .env file.';
+      statusCode = 503;
+    } else if (error.message.includes('PDF') || error.message.includes('pdf-parse')) {
+      errorMessage = 'PDF parsing failed. The file might be corrupted or image-based. Try converting to an image file.';
+      statusCode = 400;
+    } else if (error.message.includes('empty') || error.message.includes('extract')) {
+      errorMessage = 'Could not extract text from the file. Please ensure the file contains readable text.';
+      statusCode = 400;
+    } else if (error.message.includes('JSON')) {
+      errorMessage = 'AI returned invalid data format. Please try again or upload a different syllabus.';
+      statusCode = 500;
+    }
+    
+    res.status(statusCode).json({
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   } finally {
     // Clean up uploaded file
