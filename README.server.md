@@ -12,14 +12,9 @@ npm install
 MONGO_URI=your-mongodb-connection-string
 JWT_SECRET=your-secret-key-here
 PORT=5000
-```
-
-You can copy `.env.example` as a template.
-
-3. For the frontend to connect to the backend, create `.env.local` in the root:
-```
 VITE_API_URL=http://localhost:5000/api
 ```
+
 
 ## Running the Application
 

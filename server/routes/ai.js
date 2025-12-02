@@ -3,19 +3,9 @@ import OpenAI from 'openai';
 import "dotenv/config";
 import { authenticateToken } from '../middleware/auth.js';
 import { upload, deleteFile } from '../middleware/upload.js';
-import { createRequire } from 'module';
+import { PDFParse } from 'pdf-parse';
 import fs from 'fs';
 import Course from '../models/Course.js';
-
-const require = createRequire(import.meta.url);
-const pdfParseModule = require('pdf-parse');
-console.log('pdf-parse module type:', typeof pdfParseModule);
-console.log('pdf-parse module keys:', Object.keys(pdfParseModule));
-console.log('pdf-parse is function:', typeof pdfParseModule === 'function');
-console.log('pdf-parse.default type:', typeof pdfParseModule.default);
-// Handle both CommonJS default export and named export
-const pdfParse = typeof pdfParseModule === 'function' ? pdfParseModule : (pdfParseModule.default || pdfParseModule);
-console.log('Final pdfParse type:', typeof pdfParse);
 
 const router = express.Router();
 
@@ -165,8 +155,12 @@ router.post('/parse-syllabus', upload.single('syllabus'), async (req, res) => {
     if (fileType === 'application/pdf') {
       console.log('Processing PDF file...');
       const dataBuffer = fs.readFileSync(filePath);
-      const pdfData = await pdfParse(dataBuffer);
-      contentForAI = pdfData.text;
+
+      // Use pdf-parse v2 API
+      const parser = new PDFParse({ data: dataBuffer });
+      const result = await parser.getText();
+      contentForAI = result.text;
+
       console.log(`PDF extracted text length: ${contentForAI.length} characters`);
       console.log(`PDF first 200 chars: ${contentForAI.substring(0, 200)}...`);
     }
@@ -211,11 +205,15 @@ Rules:
 
     let parsedData;
 
+    // Get model from environment variable or use default
+    const aiModel = process.env.AI_MODEL || "openai/gpt-3.5-turbo";
+    console.log(`Using AI model: ${aiModel}`);
+
     // Use vision model for images, text model for PDFs
     if (fileType.startsWith('image/')) {
-      console.log('Sending image to Claude 3.5 Sonnet vision model...');
+      console.log('Sending image to AI vision model...');
       const completion = await openai.chat.completions.create({
-        model: "openrouter/anthropic/claude-3.5-sonnet:beta",
+        model: aiModel,
         messages: [
           {
             role: "user",
@@ -240,9 +238,9 @@ Rules:
       console.log('AI Response received from vision model');
     } else {
       // For PDF text
-      console.log('Sending PDF text to Claude 3.5 Sonnet...');
+      console.log('Sending PDF text to AI model...');
       const completion = await openai.chat.completions.create({
-        model: "openrouter/anthropic/claude-3.5-sonnet:beta",
+        model: aiModel,
         messages: [
           {
             role: "system",
@@ -311,15 +309,21 @@ Rules:
 
     console.log('Validation passed!');
 
-    // Check if course already exists
-    const existingCourse = await Course.findOne({
-      title: syllabusData.className
-    });
+    // Check if course already exists (optional - don't fail if DB is unavailable)
+    let existingCourse = null;
+    try {
+      existingCourse = await Course.findOne({
+        title: syllabusData.className
+      }).maxTimeMS(2000); // 2 second timeout
 
-    if (existingCourse) {
-      console.log('Course already exists in database:', existingCourse._id);
-    } else {
-      console.log('Course does not exist in database');
+      if (existingCourse) {
+        console.log('Course already exists in database:', existingCourse._id);
+      } else {
+        console.log('Course does not exist in database');
+      }
+    } catch (dbError) {
+      console.warn('Database check failed (non-critical):', dbError.message);
+      console.log('Continuing without database check...');
     }
 
     // Return the parsed data with existence check
