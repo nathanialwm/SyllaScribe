@@ -42,6 +42,8 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
       if (response.data.success) {
         alert("Sign up successful!");
         onClose();
+        localStorage.setItem('currentUser', JSON.stringify(response.data.user));
+        window.location.reload(); 
       } else {
         alert(response.data.message || "Sign up failed");
       }
@@ -56,6 +58,8 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
       if (response.data.success) {
         alert("Sign in successful!");
         onClose();
+        localStorage.setItem('currentUser', JSON.stringify(response.data.user));
+        window.location.reload(); 
       } else {
         alert(response.data.message || "Sign in failed");
       }
