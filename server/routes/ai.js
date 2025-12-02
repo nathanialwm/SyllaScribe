@@ -437,30 +437,11 @@ Rules:
 
     console.log('Validation passed with warnings:', syllabusData.warnings);
 
-    // Check if course already exists (optional - don't fail if DB is unavailable)
-    let existingCourse = null;
-    try {
-      existingCourse = await Course.findOne({
-        title: syllabusData.className
-      }).maxTimeMS(2000); // 2 second timeout
-
-      if (existingCourse) {
-        console.log('Course already exists in database:', existingCourse._id);
-      } else {
-        console.log('Course does not exist in database');
-      }
-    } catch (dbError) {
-      console.warn('Database check failed (non-critical):', dbError.message);
-      console.log('Continuing without database check...');
-    }
-
     // Return the parsed data with existence check
     console.log('=== Syllabus Parsing Completed Successfully ===');
     res.json({
       success: true,
       data: syllabusData,
-      courseExists: !!existingCourse,
-      existingCourseId: existingCourse?._id
     });
 
   } catch (error) {
