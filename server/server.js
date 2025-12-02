@@ -126,8 +126,8 @@ app.post('/createUser', async (req, res) => {
 });
 app.post('/getUser', async (req, res) => {
   try {
-    const { email, password } = req.body; 
-    
+    const { email, password } = req.body;
+
     // Validate required fields
     if (!email || !password) {
       return res.status(400).json({
@@ -138,7 +138,7 @@ app.post('/getUser', async (req, res) => {
 
     // Find user by email
     const user = await User.findOne({ email: email });
-    
+
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -146,12 +146,14 @@ app.post('/getUser', async (req, res) => {
       });
     }
 
-    // If you're NOT using bcrypt hashing (plain text passwords):
-    if (user.password === password) {
+    // Use bcrypt to compare passwords
+    const isPasswordValid = await user.comparePassword(password);
+
+    if (isPasswordValid) {
       // Remove password from response
       const userResponse = user.toObject();
       delete userResponse.password;
-      
+
       return res.status(200).json({
         success: true,
         message: 'Login successful',
