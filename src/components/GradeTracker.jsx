@@ -28,7 +28,7 @@ function GradeTracker() {
 const addGradedArea = () => {
   setGradedAreas([
     ...gradedAreas,
-    { name: "", weight: "", isOpen: false, items: [{ name: "", grade: "" }] }
+    { name: "", weight: "", isOpen: false, items: [{ name: "", grade: "", participation: null, date: "", status: "not-submitted" }] }
   ]);
 };
 
@@ -40,23 +40,35 @@ const addGradedArea = () => {
     );
   };
 
-  const updateItemField = (areaIndex, itemIndex, field, value) => {
-    setGradedAreas(prev =>
-      prev.map((area, i) => {
-        if (i !== areaIndex) return area;
-        const updatedItems = area.items.map((item, j) =>
-          j === itemIndex ? { ...item, [field]: value } : item
-        );
-        return { ...area, items: updatedItems };
-      })
-    );
-  };
+const updateItemField = (areaIndex, itemIndex, field, value) => {
+  setGradedAreas(prev =>
+    prev.map((area, i) => {
+      if (i !== areaIndex) return area;
+
+      const updatedItems = area.items.map((item, j) => {
+        if (j !== itemIndex) return item;
+
+        let updated = { ...item, [field]: value };
+
+        // Auto-fill participation grade
+        if (field === "participation") {
+          updated.grade = value === "yes" ? "100" : "0";
+        }
+
+        return updated;
+      });
+
+      return { ...area, items: updatedItems };
+    })
+  );
+};
 
   const addItemtoArea = (areaIndex) => {
     setGradedAreas(prev =>
       prev.map((area, i) =>
         i === areaIndex
-          ? { ...area, items: [...area.items, { name: "", grade: "" }] }
+          ? { ...area, items: [...area.items, 
+            { name: "", grade: "", participation: null, date: "", status: "not-submitted" }] }
           : area
       )
     );
@@ -118,6 +130,9 @@ const addGradedArea = () => {
     setFinalGrade(totalWeightedScore);
   }
  };
+
+ const isParticipationArea = (name) =>
+  name.toLowerCase().includes("participation");
 
  // Handle syllabus file selection
  const handleFileSelect = (e) => {
@@ -449,30 +464,88 @@ const addGradedArea = () => {
               {area.isOpen && (
                 <div className="graded-area-content">
                   {area.items.map((item, itemIndex) => (
-                    <div key={itemIndex} className="item-row">
-                      <input
-                        type="text"
-                        placeholder="Item Name (e.g., Homework 1)"
-                        value={item.name}
-                        onChange={(e) =>
-                          updateItemField(index, itemIndex, "name", e.target.value)
-                        }
-                      />
-                      <input
-                        type="number"
-                        placeholder="%"
-                        value={item.grade}
-                        onChange={(e) =>
-                          updateItemField(index, itemIndex, "grade", e.target.value)
-                        }
-                      />
-                      <button
-                        className="btn btn-danger m-1 delete-item-btn"
-                        onClick={() => deleteItemFromArea(index, itemIndex)}
-                      >
-                        <Trash2 size={16} />
-                    </button>
+                    <div key={itemIndex} className="item-row-container">
+
+                      {/*Row 1: old item row*/}
+                      <div className="item-row">
+                        <input
+                          type="text"
+                          placeholder="Item Name (e.g., Homework 1)"
+                          value={item.name}
+                          onChange={(e) =>
+                            updateItemField(index, itemIndex, "name", e.target.value)
+                          }
+                        />
+
+                        {isParticipationArea(area.name) ? (
+                          <div className="participation-toggle">
+                            <select
+                              className="form-select form-select-sm"
+                              value={item.participation || ""}
+                              onChange={(e) =>
+                                updateItemField(index, itemIndex, "participation", e.target.value)
+                              }
+                            >
+                              <option value="">Did you participate?</option>
+                              <option value="yes">Yes</option>
+                              <option value="no">No</option>
+                            </select>
+
+                            <span className="ms-3">
+                              Auto grade: {item.grade === "" ? "-" : `${item.grade}%`}
+                            </span>
+                          </div>
+                        ) : (
+                          <input
+                            type="number"
+                            placeholder="%"
+                            value={item.grade}
+                            onChange={(e) =>
+                              updateItemField(index, itemIndex, "grade", e.target.value)
+                            }
+                          />
+                        )}
+
+                        <button
+                          className="btn btn-danger m-1 delete-item-btn"
+                          onClick={() => deleteItemFromArea(index, itemIndex)}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+
+                      {/*row 2: new row for date and status*/}
+                      <div className="item-subrow">
+                        <label>Due date: </label>
+                        <input
+                          type="date"
+                          className="item-date-input"
+                          value={item.date}
+                          onChange={(e) =>
+                            updateItemField(index, itemIndex, "date", e.target.value)
+                          }
+                        />
+
+                        <label>Assignment Status: </label>
+
+                        <select
+                          className="item-status-select"
+                          value={item.status}
+                          onChange={(e) =>
+                            updateItemField(index, itemIndex, "status", e.target.value)
+                          }
+                        >
+                          <option value="not-submitted">Not submitted</option>
+                          <option value="submitted">Submitted</option>
+                          <option value="in-progress">Submitted, no grade yet </option>
+                          <option value="late">Late</option>
+                          <option value="missedorskipped">missed/skipped</option>
+                          <option value="participation">Participated</option>
+                        </select>
+                      </div>
+
                     </div>
+
                   ))}
                   <button 
                   onClick={() => addItemtoArea(index)}
