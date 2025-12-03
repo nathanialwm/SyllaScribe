@@ -135,6 +135,10 @@ function Home() {
           {!loading && courses.length === 0 ? (
             <div className="text-center py-4">
               <p className="text-muted">No classes found</p>
+              <button className="btn btn-sm btn-outline-secondary"
+                    onClick={() =>setSectionTitle(`Add New Class`)}>
+                    Add new class
+                  </button>
             </div>
           ) : (
             <div className="list-group">
@@ -145,11 +149,15 @@ function Home() {
                 >
                   <span>{course.title || course.ClassName || 'Untitled Course'}</span>
                   <button className="btn btn-sm btn-outline-secondary"
-                    onClick={() =>setSectionTitle(`Viewing ${course.title || course.ClassName } Grades`)}>
+                    onClick={() =>setSectionTitle(`Viewing ${course.title || course.ClassName } `)}>
                     View
                   </button>
                 </div>
               ))}
+              <button className="btn btn-sm btn-outline-secondary"
+                    onClick={() =>setSectionTitle(`Add New Class`)}>
+                    Add new class
+                  </button>
             </div>
           )}
               </div>
