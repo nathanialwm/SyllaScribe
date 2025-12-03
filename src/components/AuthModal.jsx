@@ -58,9 +58,17 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
   };
   const handleLogin = async (event, email, password, remember) => {
     event.preventDefault();
+
     try {
       const response = await axios.post('http://localhost:5000/getUser', { email, password})
       if (response.data.success) {
+
+        if (!sessionStorage.length === 0) {
+         //session storage holds course data
+
+         
+        sessionStorage.clear();
+        } 
         // No alert - just proceed with login
         sessionStorage.setItem('currentUser', JSON.stringify(response.data.user));
         if (remember) {
