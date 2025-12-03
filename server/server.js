@@ -203,6 +203,42 @@ app.get('/getCourses', async (req, res) => {
     });
   }
 });
+app.get('/getEnrolledCourses', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'userId is required'
+      });
+    }
+    
+    const enrollments = await Enrollment.find({ userId: userId })
+      .populate('courseId')
+      .sort({ enrolledAt: -1 });
+    
+    // Transform to include enrollment data
+    const enrolledCourses = enrollments.map(enrollment => ({
+      ...enrollment.courseId.toObject(),
+      enrollmentId: enrollment._id,
+      enrolledAt: enrollment.enrolledAt,
+      enrollmentGrades: enrollment.grades
+    }));
+    
+    res.status(200).json({
+      success: true,
+      courses: enrolledCourses
+    });
+    
+  } catch (error) {
+    console.error('Get enrolled courses error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching enrolled courses'
+    });
+  }
+});
 app.post('/createCourse', async (req, res) => {
   try {
     const { title } = req.body; 

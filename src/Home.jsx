@@ -44,28 +44,43 @@ function Home() {
   }
  
    useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        setLoading(true)
-        const response = await axios.get('http://localhost:5000/getCourses')
-        setCourses(response.data.courses)
-        setError(null)
-      } catch (err) {
-        setError('Failed to load courses')
-        console.error('Error fetching courses:', err)
-      } finally {
-        setLoading(false)
-      }
+  const fetchEnrolledCourses = async () => {
+    if (!user || !user._id) {
+      setCourses([]);
+      return;
     }
     
-    fetchCourses()
-  }, [])
+    try {
+      setLoading(true);
+      // Use the new endpoint with userId
+      const response = await axios.get(`http://localhost:5000/getEnrolledCourses`, {
+        params: { userId: user._id }
+    });
+      
+      if (response.data.success) {
+        setCourses(response.data.courses);
+        setError(null);
+      } else {
+        setError(response.data.message || 'Failed to load courses');
+        setCourses([]);
+      }
+    } catch (err) {
+      setError('Failed to load enrolled courses');
+      console.error('Error fetching enrolled courses:', err);
+      setCourses([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  fetchEnrolledCourses();
+}, [user]); 
   return (
 <div className="app-root">
        <nav className="navbar navbar-expand-lg navbar-dark bg-primary">
       <div className="container-fluid px-3 px-md-4 px-lg-5">
         <a className="navbar-brand fw-bold fs-4" href="#" onClick={(e) => e.preventDefault()}>
-            Welcome to SyllaScribe {user && user.name ? user.name : 'Guest'}!
+            Welcome to SyllaScribe {user && user.name ? user.name : 'N/A'}!
         </a>
         <button 
           className="navbar-toggler" 
@@ -147,7 +162,7 @@ function Home() {
                 <h5 className="mb-0">{sectionTitle}</h5>
               </div>
               <div className="card-body">
-                {GradeTracker()}
+                <GradeTracker />
               </div>
             </div>
           </div>
