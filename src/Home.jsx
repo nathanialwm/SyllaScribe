@@ -144,7 +144,8 @@ function Home() {
                   className="list-group-item d-flex justify-content-between align-items-center"
                 >
                   <span>{course.title || course.ClassName || 'Untitled Course'}</span>
-                  <button className="btn btn-sm btn-outline-secondary">
+                  <button className="btn btn-sm btn-outline-secondary"
+                    onClick={() =>setSectionTitle(`Viewing ${course.title || course.ClassName } Grades`)}>
                     View
                   </button>
                 </div>
