@@ -48,7 +48,7 @@ function Home() {
       try {
         setLoading(true)
         const response = await axios.get('http://localhost:5000/getCourses')
-        setCourses(response.data)
+        setCourses(response.data.courses)
         setError(null)
       } catch (err) {
         setError('Failed to load courses')
@@ -111,7 +111,31 @@ function Home() {
               
               </div>
               <div className="card-body">
-                {/* Empty - Add content later */}
+                 {error && (
+            <div className="alert alert-danger">
+              {error}
+            </div>
+          )}
+          
+          {!loading && courses.length === 0 ? (
+            <div className="text-center py-4">
+              <p className="text-muted">No classes found</p>
+            </div>
+          ) : (
+            <div className="list-group">
+              {courses.map((course) => (
+                <div 
+                  key={course._id || course.courseId} 
+                  className="list-group-item d-flex justify-content-between align-items-center"
+                >
+                  <span>{course.title || course.ClassName || 'Untitled Course'}</span>
+                  <button className="btn btn-sm btn-outline-secondary">
+                    View
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
               </div>
             </div>
           </div>
