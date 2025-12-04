@@ -123,7 +123,7 @@ function Home() {
                 <h5 className="mb-0">{sectionTitle}</h5>
               </div>
               <div className="card-body">
-                {GradeTracker()}
+                <GradeTracker />
               </div>
             </div>
           </div>
