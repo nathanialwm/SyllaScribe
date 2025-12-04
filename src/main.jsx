@@ -7,8 +7,10 @@ import App from './App.jsx'
 import { ThemeProvider } from './components/ThemeContext.jsx';
 import Choice from './Choice.jsx'
 
-const currentUser = localStorage.getItem('currentUser');
-const parsedUser = currentUser ? JSON.parse(currentUser) : null;
+const local = localStorage.getItem('currentUser');
+const sys = sessionStorage.getItem('currentUser');
+const currentUser = local ? local : sys;
+const parsedUser = currentUser ? JSON.parse(currentUser) : sys;
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ThemeProvider>

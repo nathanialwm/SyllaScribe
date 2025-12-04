@@ -4,12 +4,39 @@ import axios from 'axios'
 import GradeTracker from "./components/GradeTracker";
 
 function Home() {
+  const [user, setUser] = useState(null);
   const [courses, setCourses] = useState([])
   const [sectionTitle, setSectionTitle] = useState('Add New Class');
    const [loading, setLoading] = useState(false) 
   const [error, setError] = useState(null)  
+   useEffect(() => {
+    const getUser = () => {
+      try {
+        // Try sessionStorage first, then localStorage
+        const sessionUser = sessionStorage.getItem('currentUser');
+        const localUser = localStorage.getItem('currentUser');
+        
+        let userData = null;
+        if (sessionUser) {
+          userData = JSON.parse(sessionUser);
+        } else if (localUser) {
+          userData = JSON.parse(localUser);
+        }
+        
+        setUser(userData);
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        // Clear invalid data
+        localStorage.removeItem('currentUser');
+        sessionStorage.removeItem('currentUser');
+      }
+    };
+    
+    getUser();
+  }, []);
   function handleSignOut() {
     localStorage.removeItem('currentUser');
+    sessionStorage.removeItem('currentUser');
     window.location.reload();
   }
   function handleSettings() {
@@ -38,7 +65,7 @@ function Home() {
        <nav className="navbar navbar-expand-lg navbar-dark bg-primary">
       <div className="container-fluid px-3 px-md-4 px-lg-5">
         <a className="navbar-brand fw-bold fs-4" href="#" onClick={(e) => e.preventDefault()}>
-          Welcome to SyllaScribe {localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser')).name : ' '}
+            Welcome to SyllaScribe {user && user.name ? user.name : 'Guest'}!
         </a>
         <button 
           className="navbar-toggler" 
