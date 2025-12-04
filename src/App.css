@@ -1,16 +1,16 @@
 .app-root {
   min-height: 100vh;
   min-width: 100vw;
-  background-color: #f8f9fa;
+  /* Use the theme variables for page background and text color. */
+  background-color: var(--bg);
+  color: var(--text);
 }
 
-/* Responsive navbar padding - scales smoothly with screen size */
 .navbar .container-fluid {
   padding-left: clamp(1rem, 3vw, 3rem);
   padding-right: clamp(1rem, 3vw, 3rem);
 }
 
-/* Ensure modal displays properly */
 .modal.show {
   display: block !important;
 }
