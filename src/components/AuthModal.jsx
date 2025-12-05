@@ -6,7 +6,7 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [termsAgree, setTermsAgree] = useState(false);
-  const [remeber, setRemeber] = useState(false);
+  const [remember, setRemember] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   
   const handleSignUp = async (event, name, email, confirmPassword, password, termsAgree ) => {
@@ -56,13 +56,19 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
       alert(error);
     }
   };
-  const handleLogin = async (event, email, password, remeber) => {
+  const handleLogin = async (event, email, password, remember) => {
     event.preventDefault();
     try {
       const response = await axios.post('http://localhost:5000/getUser', { email, password})
       if (response.data.success) {
         // No alert - just proceed with login
+        sessionStorage.setItem('currentUser', JSON.stringify(response.data.user));
+        if (remember) {
         localStorage.setItem('currentUser', JSON.stringify(response.data.user));
+      } else {
+        // Clear localStorage if "Remember me" is NOT checked
+        localStorage.removeItem('currentUser');
+      }
         onClose();
         window.location.reload();
       } else {
@@ -125,14 +131,14 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
                       />
                     </div>
                     <div className="mb-3 form-check">
-                      <input type="checkbox" className="form-check-input" id="rememberMe"checked={remeber}
-                        onChange={(e) => setRemeber(e.target.checked)} />
+                      <input type="checkbox" className="form-check-input" id="rememberMe"checked={remember}
+                        onChange={(e) => setRemember(e.target.checked)} />
                       <label className="form-check-label" htmlFor="rememberMe">
                         Remember me
                       </label>
                     </div>
                     <button type="submit" className="btn btn-primary w-100 mb-3"
-                    onClick={(event)  => handleLogin(event, email, password, remeber)}>Login</button>
+                    onClick={(event)  => handleLogin(event, email, password, remember)}>Login</button>
                     <div className="text-center">
                       <p className="mb-0">Don't have an account?</p>
                       <button
