@@ -1,9 +1,12 @@
 
 import { useState, useEffect } from 'react'  
 import axios from 'axios' 
+import { Sun, Moon } from 'lucide-react';
+import { useTheme } from './components/ThemeContext';
 import GradeTracker from "./components/GradeTracker";
 
 function Home() {
+  const { theme, toggleTheme } = useTheme();
   const [courses, setCourses] = useState([])
   const [sectionTitle, setSectionTitle] = useState('Add New Class');
    const [loading, setLoading] = useState(false) 
@@ -34,8 +37,31 @@ function Home() {
     fetchCourses()
   }, [])
   return (
-<div className="app-root">
-       <nav className="navbar navbar-expand-lg navbar-dark bg-primary">
+    <>
+      <style>{`
+        .navbar .navbar-brand {
+          color: ${theme === 'light' ? '#ffffff' : '#000000'} !important;
+        }
+        .navbar #settings-btn,
+        .navbar #logout-btn,
+        .navbar #theme-toggle-btn {
+          color: ${theme === 'light' ? '#ffffff' : '#000000'} !important;
+        }
+        .navbar #theme-toggle-btn svg {
+          color: ${theme === 'light' ? '#ffffff' : '#000000'} !important;
+          stroke: ${theme === 'light' ? '#ffffff' : '#000000'} !important;
+        }
+        #classes-header.bg-light,
+        #add-class-header.bg-light {
+          background-color: ${theme === 'light' ? '#f8f9fa' : '#212529'} !important;
+        }
+        #classes-header h5,
+        #add-class-header h5 {
+          color: ${theme === 'light' ? '#000000' : '#ffffff'} !important;
+        }
+      `}</style>
+      <div className="app-root">
+       <nav className="navbar navbar-expand-lg" style={{ backgroundColor: 'var(--primary)' }}>
       <div className="container-fluid px-3 px-md-4 px-lg-5">
         <a className="navbar-brand fw-bold fs-4" href="#" onClick={(e) => e.preventDefault()}>
           Welcome to SyllaScribe {localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser')).name : ' '}
@@ -52,18 +78,30 @@ function Home() {
           <span className="navbar-toggler-icon"></span>
         </button>
         <div className="collapse navbar-collapse justify-content-end" id="navbarNav">
-          <div className="d-flex gap-2">
+          <div className="d-flex gap-2 align-items-center">
            <button 
+              id="settings-btn"
               className="btn btn-outline-light"
               onClick={() => handleSettings()}
             >
               Settings
             </button>
             <button 
-              className="btn btn-light"
+              id="logout-btn"
+              className="btn btn-outline-light"
               onClick={() =>handleSignOut()}
             >
-              logout?
+              Logout
+            </button>
+            <button
+              id="theme-toggle-btn"
+              type="button"
+              className="btn btn-outline-light d-flex align-items-center gap-1"
+              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              aria-pressed={theme === 'dark'}
+              onClick={(e) => { console.debug('[Home] toggle clicked', theme); toggleTheme(); }}
+            >
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
             </button>
           </div>
         </div>
@@ -74,7 +112,7 @@ function Home() {
           {/* Left Section - Empty */}
           <div className="col-md-6">
             <div className="card shadow-sm border">
-              <div className="card-header bg-light">
+              <div id="classes-header" className="card-header" style={{ backgroundColor: theme === 'light' ? '#f8f9fa' : '#212529' }}>
                  <h5 className="mb-0">Classes ({courses.length})</h5>
                 {loading && (
                   <div className="spinner-border spinner-border-sm text-primary" role="status">
@@ -92,7 +130,7 @@ function Home() {
           {/* Right Section - Empty */}
           <div className="col-md-6">
             <div className="card shadow-sm border">
-              <div className="card-header bg-light">
+              <div id="add-class-header" className="card-header" style={{ backgroundColor: theme === 'light' ? '#f8f9fa' : '#212529' }}>
                 <h5 className="mb-0">{sectionTitle}</h5>
               </div>
               <div className="card-body">
@@ -104,6 +142,7 @@ function Home() {
       </main>
       
     </div>
+    </>
   )
 }
 

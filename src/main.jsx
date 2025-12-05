@@ -12,8 +12,7 @@ const parsedUser = currentUser ? JSON.parse(currentUser) : null;
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ThemeProvider>
-      <App />
+      <Choice user ={parsedUser} />
     </ThemeProvider>
-    <Choice user ={parsedUser} />
   </StrictMode>,
 )

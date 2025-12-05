@@ -3,7 +3,14 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 const ThemeContext = createContext();
 
 export const ThemeProvider = ({ children }) => { // Default to light mode on initial load.
-  const getInitialTheme = () => 'light';
+  const getInitialTheme = () => {
+    try {
+      const storedTheme = localStorage.getItem('theme');
+      return storedTheme === 'dark' || storedTheme === 'light' ? storedTheme : 'light';
+    } catch (e) {
+      return 'light';
+    }
+  };
   const [theme, setTheme] = useState(getInitialTheme);
 
 
