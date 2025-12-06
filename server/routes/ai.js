@@ -1,5 +1,5 @@
 import express from 'express';
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import "dotenv/config";
 import { authenticateToken } from '../middleware/auth.js';
 import { upload, deleteFile } from '../middleware/upload.js';
@@ -14,44 +14,69 @@ const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
-// Initialize OpenAI client with OpenRouter configuration
-if (!process.env.AI_KEY) {
-  console.error('ERROR: AI_KEY environment variable is not set!');
-  throw new Error('AI_KEY environment variable is required');
+// Initialize Google Generative AI client
+if (!process.env.GEMINI_API_KEY) {
+  console.error('ERROR: GEMINI_API_KEY environment variable is not set!');
+  throw new Error('GEMINI_API_KEY environment variable is required');
 }
 
-const openai = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.AI_KEY,
-  defaultHeaders: {
-    "HTTP-Referer": process.env.SITE_URL || "http://localhost:5173",
-    "X-Title": process.env.SITE_NAME || "SyllaScribe",
-  },
-  dangerouslyAllowBrowser: false,
-});
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+
+// Rate limiting for free tier (15 RPM, 1M TPM, 1500 RPD)
+let requestCount = 0;
+let lastMinuteReset = Date.now();
+let dailyRequestCount = 0;
+let lastDayReset = Date.now();
+
+function checkRateLimit() {
+  const now = Date.now();
+
+  // Reset minute counter
+  if (now - lastMinuteReset > 60000) {
+    requestCount = 0;
+    lastMinuteReset = now;
+  }
+
+  // Reset daily counter
+  if (now - lastDayReset > 86400000) {
+    dailyRequestCount = 0;
+    lastDayReset = now;
+  }
+
+  // Check limits
+  if (requestCount >= 15) {
+    throw new Error('Rate limit exceeded: 15 requests per minute. Please wait.');
+  }
+  if (dailyRequestCount >= 1500) {
+    throw new Error('Daily limit exceeded: 1500 requests per day.');
+  }
+
+  requestCount++;
+  dailyRequestCount++;
+}
 
 // Test connection endpoint - simple text completion
 router.post('/test', authenticateToken, async (req, res) => {
   try {
+    checkRateLimit();
     const { message } = req.body;
 
     if (!message) {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    const completion = await openai.chat.completions.create({
-      model: "openai/gpt-3.5-turbo",
-      messages: [
-        {
-          role: "user",
-          content: message
-        }
-      ]
-    });
+    const model = genAI.getGenerativeModel({ model: modelName });
+    const result = await model.generateContent(message);
+    const response = result.response;
 
     res.json({
-      response: completion.choices[0].message.content,
-      usage: completion.usage
+      response: response.text(),
+      usage: {
+        promptTokens: response.usageMetadata?.promptTokenCount || 0,
+        completionTokens: response.usageMetadata?.candidatesTokenCount || 0,
+        totalTokens: response.usageMetadata?.totalTokenCount || 0
+      }
     });
   } catch (error) {
     console.error('AI test error:', error);
@@ -65,6 +90,7 @@ router.post('/test', authenticateToken, async (req, res) => {
 // Analyze image with AI vision
 router.post('/analyze-image', authenticateToken, async (req, res) => {
   try {
+    checkRateLimit();
     const { imageUrl, prompt } = req.body;
 
     if (!imageUrl) {
@@ -73,30 +99,35 @@ router.post('/analyze-image', authenticateToken, async (req, res) => {
 
     const userPrompt = prompt || "What is in this image?";
 
-    const completion = await openai.chat.completions.create({
-      model: "openai/gpt-4-vision-preview",
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: userPrompt
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: imageUrl
-              }
-            }
-          ]
+    // Extract base64 data and mime type from data URL
+    const matches = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (!matches) {
+      throw new Error('Invalid image URL format. Expected data URL with base64 encoding.');
+    }
+
+    const mimeType = matches[1];
+    const base64Data = matches[2];
+
+    const model = genAI.getGenerativeModel({ model: modelName });
+    const result = await model.generateContent([
+      userPrompt,
+      {
+        inlineData: {
+          data: base64Data,
+          mimeType: mimeType
         }
-      ]
-    });
+      }
+    ]);
+
+    const response = result.response;
 
     res.json({
-      response: completion.choices[0].message.content,
-      usage: completion.usage
+      response: response.text(),
+      usage: {
+        promptTokens: response.usageMetadata?.promptTokenCount || 0,
+        completionTokens: response.usageMetadata?.candidatesTokenCount || 0,
+        totalTokens: response.usageMetadata?.totalTokenCount || 0
+      }
     });
   } catch (error) {
     console.error('AI image analysis error:', error);
@@ -110,22 +141,54 @@ router.post('/analyze-image', authenticateToken, async (req, res) => {
 // Chat completion endpoint - for general text interactions
 router.post('/chat', authenticateToken, async (req, res) => {
   try {
-    const { messages, model } = req.body;
+    checkRateLimit();
+    const { messages } = req.body;
 
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'Messages array is required' });
     }
 
-    const selectedModel = model || "openai/gpt-3.5-turbo";
+    // Convert OpenAI message format to Gemini format
+    let systemInstruction = null;
+    const geminiContents = [];
 
-    const completion = await openai.chat.completions.create({
-      model: selectedModel,
-      messages: messages
+    for (const msg of messages) {
+      if (msg.role === 'system') {
+        // Gemini uses systemInstruction separately
+        systemInstruction = msg.content;
+      } else if (msg.role === 'user') {
+        geminiContents.push({
+          role: 'user',
+          parts: [{ text: msg.content }]
+        });
+      } else if (msg.role === 'assistant') {
+        geminiContents.push({
+          role: 'model',
+          parts: [{ text: msg.content }]
+        });
+      }
+    }
+
+    const modelConfig = { model: modelName };
+    if (systemInstruction) {
+      modelConfig.systemInstruction = systemInstruction;
+    }
+
+    const model = genAI.getGenerativeModel(modelConfig);
+    const chat = model.startChat({
+      history: geminiContents.slice(0, -1),
     });
 
+    const result = await chat.sendMessage(geminiContents[geminiContents.length - 1].parts[0].text);
+    const response = result.response;
+
     res.json({
-      response: completion.choices[0].message.content,
-      usage: completion.usage
+      response: response.text(),
+      usage: {
+        promptTokens: response.usageMetadata?.promptTokenCount || 0,
+        completionTokens: response.usageMetadata?.candidatesTokenCount || 0,
+        totalTokens: response.usageMetadata?.totalTokenCount || 0
+      }
     });
   } catch (error) {
     console.error('AI chat error:', error);
@@ -304,74 +367,71 @@ Rules:
 
     let parsedData;
 
-    // Get model from environment variable or use default
-    const aiModel = process.env.AI_MODEL || "openai/gpt-3.5-turbo";
-    console.log(`Using AI model: ${aiModel}`);
+    // Check rate limit before making AI call
+    checkRateLimit();
+    console.log(`Using Gemini model: ${modelName}`);
 
     // Send to AI model - use vision for images, text for PDFs
     if (isPDFText) {
-      console.log('Sending PDF text to AI model...');
-      const completion = await openai.chat.completions.create({
-        model: aiModel,
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt
-          },
-          {
-            role: "user",
-            content: `Here is the syllabus text:\n\n${contentForAI}`
-          }
-        ],
-        temperature: 0.1
+      console.log('Sending PDF text to Gemini model...');
+
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction: systemPrompt,
+        generationConfig: {
+          temperature: 0.1,
+        }
       });
 
-      parsedData = completion.choices[0].message.content;
+      const result = await model.generateContent(`Here is the syllabus text:\n\n${contentForAI}`);
+      const response = result.response;
+      parsedData = response.text();
       console.log('AI Response received from text model');
     } else {
-      console.log('Sending image(s) to AI vision model...');
+      console.log('Sending image(s) to Gemini vision model...');
+
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          temperature: 0.1,
+        }
+      });
 
       // Build content array with text prompt and image(s)
-      const messageContent = [
-        {
-          type: "text",
-          text: systemPrompt
-        }
-      ];
+      const contentParts = [systemPrompt];
 
       // Handle multiple images (from rendered PDF pages) or single image
       if (Array.isArray(contentForAI)) {
         console.log(`Sending ${contentForAI.length} PDF page images to vision model`);
-        contentForAI.forEach((imageUrl) => {
-          messageContent.push({
-            type: "image_url",
-            image_url: {
-              url: imageUrl
-            }
-          });
+        contentForAI.forEach((imageDataUrl) => {
+          // Extract base64 and mime type from data URL
+          const matches = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/);
+          if (matches) {
+            contentParts.push({
+              inlineData: {
+                data: matches[2],
+                mimeType: matches[1]
+              }
+            });
+          }
         });
       } else {
         console.log('Sending single image to vision model');
-        messageContent.push({
-          type: "image_url",
-          image_url: {
-            url: contentForAI
-          }
-        });
+        // Extract base64 and mime type from data URL
+        const matches = contentForAI.match(/^data:([^;]+);base64,(.+)$/);
+        if (matches) {
+          contentParts.push({
+            inlineData: {
+              data: matches[2],
+              mimeType: matches[1]
+            }
+          });
+        }
       }
 
-      const completion = await openai.chat.completions.create({
-        model: aiModel,
-        messages: [
-          {
-            role: "user",
-            content: messageContent
-          }
-        ],
-        temperature: 0.1
-      });
-
-      parsedData = completion.choices[0].message.content;
+      const result = await model.generateContent(contentParts);
+      const response = result.response;
+      parsedData = response.text();
       console.log('AI Response received from vision model');
     }
 
