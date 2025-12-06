@@ -1,5 +1,5 @@
 import express from 'express';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI, createPartFromUri } from '@google/genai';
 import "dotenv/config";
 import { authenticateToken } from '../middleware/auth.js';
 import { upload, deleteFile } from '../middleware/upload.js';
@@ -14,64 +14,70 @@ const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
-// Initialize Google Generative AI client
+// Initialize Google GenAI client (newer SDK)
 if (!process.env.GEMINI_API_KEY) {
   console.error('ERROR: GEMINI_API_KEY environment variable is not set!');
   throw new Error('GEMINI_API_KEY environment variable is required');
 }
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp';
 
-// Rate limiting for free tier (15 RPM, 1M TPM, 1500 RPD)
-let requestCount = 0;
-let lastMinuteReset = Date.now();
-let dailyRequestCount = 0;
-let lastDayReset = Date.now();
+// Token-based rate limiting (125k tokens/minute for gemini-2.0-flash-exp)
+const TOKEN_LIMIT_PER_MINUTE = 125000;
+let tokensUsedThisMinute = 0;
+let tokenMinuteReset = Date.now();
 
-function checkRateLimit() {
+async function checkTokenLimit(estimatedTokens) {
   const now = Date.now();
 
-  // Reset minute counter
-  if (now - lastMinuteReset > 60000) {
-    requestCount = 0;
-    lastMinuteReset = now;
+  // Reset token counter every minute
+  if (now - tokenMinuteReset > 60000) {
+    tokensUsedThisMinute = 0;
+    tokenMinuteReset = now;
   }
 
-  // Reset daily counter
-  if (now - lastDayReset > 86400000) {
-    dailyRequestCount = 0;
-    lastDayReset = now;
+  // Check if adding this request would exceed limit
+  if (tokensUsedThisMinute + estimatedTokens > TOKEN_LIMIT_PER_MINUTE) {
+    const secondsUntilReset = Math.ceil((60000 - (now - tokenMinuteReset)) / 1000);
+    throw new Error(`Token rate limit exceeded: ${tokensUsedThisMinute}/${TOKEN_LIMIT_PER_MINUTE} tokens used this minute. Reset in ${secondsUntilReset}s.`);
   }
+}
 
-  // Check limits
-  if (requestCount >= 15) {
-    throw new Error('Rate limit exceeded: 15 requests per minute. Please wait.');
-  }
-  if (dailyRequestCount >= 1500) {
-    throw new Error('Daily limit exceeded: 1500 requests per day.');
-  }
-
-  requestCount++;
-  dailyRequestCount++;
+function trackTokenUsage(tokens) {
+  tokensUsedThisMinute += tokens;
+  console.log(`Tokens used this minute: ${tokensUsedThisMinute}/${TOKEN_LIMIT_PER_MINUTE}`);
 }
 
 // Test connection endpoint - simple text completion
 router.post('/test', authenticateToken, async (req, res) => {
   try {
-    checkRateLimit();
     const { message } = req.body;
 
     if (!message) {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    const model = genAI.getGenerativeModel({ model: modelName });
-    const result = await model.generateContent(message);
-    const response = result.response;
+    // Count tokens before sending
+    const countResponse = await ai.models.countTokens({
+      model: modelName,
+      contents: message,
+    });
+
+    await checkTokenLimit(countResponse.totalTokens * 2); // Estimate input + output tokens
+
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: message,
+    });
+
+    // Track actual token usage
+    if (response.usageMetadata) {
+      trackTokenUsage(response.usageMetadata.totalTokenCount || 0);
+    }
 
     res.json({
-      response: response.text(),
+      response: response.text,
       usage: {
         promptTokens: response.usageMetadata?.promptTokenCount || 0,
         completionTokens: response.usageMetadata?.candidatesTokenCount || 0,
@@ -90,7 +96,6 @@ router.post('/test', authenticateToken, async (req, res) => {
 // Analyze image with AI vision
 router.post('/analyze-image', authenticateToken, async (req, res) => {
   try {
-    checkRateLimit();
     const { imageUrl, prompt } = req.body;
 
     if (!imageUrl) {
@@ -108,21 +113,29 @@ router.post('/analyze-image', authenticateToken, async (req, res) => {
     const mimeType = matches[1];
     const base64Data = matches[2];
 
-    const model = genAI.getGenerativeModel({ model: modelName });
-    const result = await model.generateContent([
-      userPrompt,
-      {
-        inlineData: {
-          data: base64Data,
-          mimeType: mimeType
-        }
-      }
-    ]);
+    // Estimate tokens (images are roughly 258 tokens each, plus prompt)
+    await checkTokenLimit(500);
 
-    const response = result.response;
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: [
+        { text: userPrompt },
+        {
+          inlineData: {
+            data: base64Data,
+            mimeType: mimeType
+          }
+        }
+      ]
+    });
+
+    // Track actual token usage
+    if (response.usageMetadata) {
+      trackTokenUsage(response.usageMetadata.totalTokenCount || 0);
+    }
 
     res.json({
-      response: response.text(),
+      response: response.text,
       usage: {
         promptTokens: response.usageMetadata?.promptTokenCount || 0,
         completionTokens: response.usageMetadata?.candidatesTokenCount || 0,
@@ -141,49 +154,35 @@ router.post('/analyze-image', authenticateToken, async (req, res) => {
 // Chat completion endpoint - for general text interactions
 router.post('/chat', authenticateToken, async (req, res) => {
   try {
-    checkRateLimit();
     const { messages } = req.body;
 
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'Messages array is required' });
     }
 
-    // Convert OpenAI message format to Gemini format
-    let systemInstruction = null;
-    const geminiContents = [];
+    // Build content from messages
+    const fullConversation = messages.map(m => m.content).join('\n');
 
-    for (const msg of messages) {
-      if (msg.role === 'system') {
-        // Gemini uses systemInstruction separately
-        systemInstruction = msg.content;
-      } else if (msg.role === 'user') {
-        geminiContents.push({
-          role: 'user',
-          parts: [{ text: msg.content }]
-        });
-      } else if (msg.role === 'assistant') {
-        geminiContents.push({
-          role: 'model',
-          parts: [{ text: msg.content }]
-        });
-      }
-    }
-
-    const modelConfig = { model: modelName };
-    if (systemInstruction) {
-      modelConfig.systemInstruction = systemInstruction;
-    }
-
-    const model = genAI.getGenerativeModel(modelConfig);
-    const chat = model.startChat({
-      history: geminiContents.slice(0, -1),
+    // Count tokens before sending
+    const countResponse = await ai.models.countTokens({
+      model: modelName,
+      contents: fullConversation,
     });
 
-    const result = await chat.sendMessage(geminiContents[geminiContents.length - 1].parts[0].text);
-    const response = result.response;
+    await checkTokenLimit(countResponse.totalTokens * 2);
+
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: fullConversation,
+    });
+
+    // Track actual token usage
+    if (response.usageMetadata) {
+      trackTokenUsage(response.usageMetadata.totalTokenCount || 0);
+    }
 
     res.json({
-      response: response.text(),
+      response: response.text,
       usage: {
         promptTokens: response.usageMetadata?.promptTokenCount || 0,
         completionTokens: response.usageMetadata?.candidatesTokenCount || 0,
@@ -217,67 +216,69 @@ router.post('/parse-syllabus', upload.single('syllabus'), async (req, res) => {
     console.log(`File received: ${req.file.originalname}`);
     console.log(`File type: ${fileType}, Size: ${fileSize} bytes`);
 
-    let contentForAI = '';
-    let isPDFText = false;
+    let uploadedFile = null;
+    let useFileUpload = false;
+    let contentForAI = null;
 
-    // Handle PDF files - extract text using pdfjs-dist
+    // Handle PDF files using Gemini File Upload API (better for preserving formatting)
     if (fileType === 'application/pdf') {
-      console.log('Processing PDF file with pdfjs-dist...');
-      isPDFText = true;
-      const dataBuffer = fs.readFileSync(filePath);
+      console.log('Uploading PDF to Gemini File API for processing...');
 
-      // Use pdfjs-dist to extract text - convert Buffer to Uint8Array
-      const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
-      const uint8Array = new Uint8Array(dataBuffer);
-      const loadingTask = pdfjsLib.getDocument({ data: uint8Array });
-      const pdfDocument = await loadingTask.promise;
+      try {
+        // Upload the file to Gemini
+        uploadedFile = await ai.files.upload({
+          file: filePath,
+          config: {
+            displayName: req.file.originalname,
+          },
+        });
 
-      console.log(`PDF has ${pdfDocument.numPages} pages`);
+        console.log(`File uploaded: ${uploadedFile.name}`);
+        console.log(`File state: ${uploadedFile.state}`);
 
-      let fullText = '';
-      for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
-        const page = await pdfDocument.getPage(pageNum);
-        const textContent = await page.getTextContent();
+        // Wait for the file to be processed
+        let getFile = await ai.files.get({ name: uploadedFile.name });
+        let retries = 0;
+        const maxRetries = 12; // 1 minute max wait (5s * 12)
 
-        // Detailed logging for first page to diagnose issues
-        if (pageNum === 1) {
-          console.log(`Page 1 - textContent.items count: ${textContent.items.length}`);
-          if (textContent.items.length > 0) {
-            console.log(`Page 1 - First 5 items:`, textContent.items.slice(0, 5).map(item => ({
-              str: item.str,
-              length: item.str?.length || 0
-            })));
-          } else {
-            console.log('Page 1 - No text items found (likely a scanned/image PDF)');
-          }
+        while (getFile.state === 'PROCESSING' && retries < maxRetries) {
+          console.log(`File is still processing (${retries + 1}/${maxRetries})...`);
+          await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait 5 seconds
+          getFile = await ai.files.get({ name: uploadedFile.name });
+          retries++;
         }
 
-        const pageText = textContent.items.map(item => item.str).join(' ');
-        console.log(`Page ${pageNum} extracted: ${pageText.length} characters`);
-        fullText += pageText + '\n';
-      }
+        if (getFile.state === 'FAILED') {
+          throw new Error('File processing failed on Gemini servers.');
+        }
 
-      contentForAI = fullText;
-      console.log(`PDF text extracted: ${contentForAI.length} characters`);
-      console.log(`PDF first 200 chars: ${contentForAI.substring(0, 200)}...`);
+        if (getFile.state === 'PROCESSING') {
+          throw new Error('File processing timeout - file took too long to process.');
+        }
 
-      // If almost no text extracted, PDF is likely scanned/image-based or has text in tables/forms
-      if (contentForAI.trim().length < 100) {
-        console.log('WARNING: Very little text extracted from PDF');
-        console.log('PDF may be scanned, have text in tables/forms, or use non-standard text encoding');
-        console.log('Attempting to convert PDF pages to images using pdf-poppler...');
+        console.log(`File processing complete! State: ${getFile.state}`);
+        uploadedFile = getFile;
+        useFileUpload = true;
 
-        isPDFText = false;
+      } catch (uploadError) {
+        console.error('File upload error:', uploadError.message);
+        console.log('Falling back to base64 image conversion...');
+        useFileUpload = false;
+
+        // Fallback: Convert PDF to images if upload fails
+        const dataBuffer = fs.readFileSync(filePath);
+        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+        const uint8Array = new Uint8Array(dataBuffer);
+        const loadingTask = pdfjsLib.getDocument({ data: uint8Array });
+        const pdfDocument = await loadingTask.promise;
+
         const pageImagesToSend = [];
-
-        // Create temporary directory for output images
         const tempDir = path.join(path.dirname(filePath), 'temp_pdf_images');
         if (!fs.existsSync(tempDir)) {
           fs.mkdirSync(tempDir, { recursive: true });
         }
 
         try {
-          // Convert first 3 pages to PNG images
           const pagesToRender = Math.min(3, pdfDocument.numPages);
           console.log(`Converting ${pagesToRender} page(s) to images...`);
 
@@ -286,38 +287,24 @@ router.post('/parse-syllabus', upload.single('syllabus'), async (req, res) => {
             out_dir: tempDir,
             out_prefix: 'page',
             page: `1-${pagesToRender}`,
-            scale: 2048 // High resolution for better OCR
+            scale: 2048
           };
 
           await convert(filePath, opts);
-          console.log('PDF pages converted to images successfully');
 
-          // Read the generated images and convert to base64
           for (let pageNum = 1; pageNum <= pagesToRender; pageNum++) {
             const imagePath = path.join(tempDir, `page-${pageNum}.png`);
-
             if (fs.existsSync(imagePath)) {
               const imageBuffer = fs.readFileSync(imagePath);
               const base64Image = imageBuffer.toString('base64');
               pageImagesToSend.push(`data:image/png;base64,${base64Image}`);
-              console.log(`Page ${pageNum} loaded: ${base64Image.length} characters (base64)`);
-
-              // Clean up individual image file
               fs.unlinkSync(imagePath);
-            } else {
-              console.warn(`Warning: Image file not found for page ${pageNum}`);
             }
           }
 
-          // Store images to send to vision model
           contentForAI = pageImagesToSend;
-          console.log(`Successfully converted ${pageImagesToSend.length} page(s) to images`);
-
-        } catch (convertError) {
-          console.error('PDF conversion error:', convertError.message);
-          throw new Error(`Failed to convert PDF to images: ${convertError.message}`);
+          console.log(`Fallback: Successfully converted ${pageImagesToSend.length} page(s) to images`);
         } finally {
-          // Clean up temp directory
           if (fs.existsSync(tempDir)) {
             fs.rmSync(tempDir, { recursive: true, force: true });
           }
@@ -366,39 +353,74 @@ Rules:
 - Be flexible and make reasonable inferences from the document structure and context.`;
 
     let parsedData;
+    let response;
 
-    // Check rate limit before making AI call
-    checkRateLimit();
     console.log(`Using Gemini model: ${modelName}`);
 
-    // Send to AI model - use vision for images, text for PDFs
-    if (isPDFText) {
-      console.log('Sending PDF text to Gemini model...');
+    // Send to AI model - three paths: uploaded file, images, or text
+    if (useFileUpload && uploadedFile) {
+      console.log('Using uploaded file from Gemini File API...');
 
-      const model = genAI.getGenerativeModel({
+      // Build content with file reference
+      const content = [systemPrompt];
+
+      if (uploadedFile.uri && uploadedFile.mimeType) {
+        const fileContent = createPartFromUri(uploadedFile.uri, uploadedFile.mimeType);
+        content.push(fileContent);
+      }
+
+      // Estimate tokens for large PDFs (rough estimate: 1 token per 4 chars, PDFs avg 5k tokens)
+      await checkTokenLimit(10000); // Conservative estimate for PDF
+
+      response = await ai.models.generateContent({
         model: modelName,
-        systemInstruction: systemPrompt,
-        generationConfig: {
+        contents: content,
+        config: {
           temperature: 0.1,
         }
       });
 
-      const result = await model.generateContent(`Here is the syllabus text:\n\n${contentForAI}`);
-      const response = result.response;
-      parsedData = response.text();
+      parsedData = response.text;
+      console.log('AI Response received from file upload model');
+
+      // Clean up uploaded file from Gemini
+      try {
+        await ai.files.delete({ name: uploadedFile.name });
+        console.log(`Deleted uploaded file: ${uploadedFile.name}`);
+      } catch (deleteError) {
+        console.warn('Failed to delete uploaded file:', deleteError.message);
+      }
+
+    } else if (contentForAI && typeof contentForAI === 'string') {
+      console.log('Sending text content to Gemini model...');
+
+      const fullPrompt = `${systemPrompt}\n\n${contentForAI}`;
+
+      // Count tokens before sending
+      const countResponse = await ai.models.countTokens({
+        model: modelName,
+        contents: fullPrompt,
+      });
+
+      console.log(`Estimated tokens: ${countResponse.totalTokens}`);
+      await checkTokenLimit(countResponse.totalTokens * 2);
+
+      response = await ai.models.generateContent({
+        model: modelName,
+        contents: fullPrompt,
+        config: {
+          temperature: 0.1,
+        }
+      });
+
+      parsedData = response.text;
       console.log('AI Response received from text model');
-    } else {
+
+    } else if (Array.isArray(contentForAI) || contentForAI) {
       console.log('Sending image(s) to Gemini vision model...');
 
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: {
-          temperature: 0.1,
-        }
-      });
-
       // Build content array with text prompt and image(s)
-      const contentParts = [systemPrompt];
+      const contentParts = [{ text: systemPrompt }];
 
       // Handle multiple images (from rendered PDF pages) or single image
       if (Array.isArray(contentForAI)) {
@@ -429,10 +451,26 @@ Rules:
         }
       }
 
-      const result = await model.generateContent(contentParts);
-      const response = result.response;
-      parsedData = response.text();
+      // Estimate tokens (images ~258 tokens each + prompt)
+      const estimatedTokens = (Array.isArray(contentForAI) ? contentForAI.length * 258 : 258) + 500;
+      await checkTokenLimit(estimatedTokens * 2);
+
+      response = await ai.models.generateContent({
+        model: modelName,
+        contents: contentParts,
+        config: {
+          temperature: 0.1,
+        }
+      });
+
+      parsedData = response.text;
       console.log('AI Response received from vision model');
+    }
+
+    // Track actual token usage
+    if (response.usageMetadata) {
+      trackTokenUsage(response.usageMetadata.totalTokenCount || 0);
+      console.log(`Actual tokens used: ${response.usageMetadata.totalTokenCount}`);
     }
 
     console.log('Raw AI response length:', parsedData.length);
