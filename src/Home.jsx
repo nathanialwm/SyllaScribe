@@ -6,6 +6,7 @@ import { useTheme } from './components/ThemeContext';
 import GradeTracker from "./components/GradeTracker";
 
 function Home() {
+  const { theme, toggleTheme } = useTheme();
   const [user, setUser] = useState(null);
   const [courses, setCourses] = useState([])
   const [sectionTitle, setSectionTitle] = useState('Add New Class');
