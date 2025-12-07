@@ -186,15 +186,68 @@ app.post('/getUser', async (req, res) => {
   }
 })
 
-app.post('/resetPassword', async (req, res) => {
+// Request password reset - generates verification code
+app.post('/requestPasswordReset', async (req, res) => {
   try {
-    const { email, newPassword } = req.body;
+    const { email } = req.body;
 
-    // Validate required fields
-    if (!email || !newPassword) {
+    if (!email) {
       return res.status(400).json({
         success: false,
-        message: 'Email and new password are required'
+        message: 'Email is required'
+      });
+    }
+
+    const trimmedEmail = email.trim();
+    const user = await User.findOne({ email: trimmedEmail });
+
+    if (!user) {
+      // Don't reveal if email exists for security
+      return res.status(200).json({
+        success: true,
+        message: 'If an account exists with this email, a reset code has been sent.'
+      });
+    }
+
+    // Generate 6-digit verification code
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Store code and expiration (15 minutes)
+    user.resetPasswordToken = resetCode;
+    user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+    await user.save();
+
+    // In production, send email here. For now, log it (remove in production!)
+    console.log(`\n=== PASSWORD RESET CODE ===`);
+    console.log(`Email: ${trimmedEmail}`);
+    console.log(`Code: ${resetCode}`);
+    console.log(`Expires in: 15 minutes`);
+    console.log(`===========================\n`);
+    
+    return res.status(200).json({
+      success: true,
+      message: 'If an account exists with this email, a reset code has been sent. Check your email. (For development: code is in server console)'
+    });
+
+  } catch (error) {
+    console.error('Request password reset error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error during password reset request'
+    });
+  }
+});
+
+// Reset password with verification code
+app.post('/resetPassword', async (req, res) => {
+  try {
+    const { email, resetCode, newPassword } = req.body;
+
+    // Validate required fields
+    if (!email || !resetCode || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email, reset code, and new password are required'
       });
     }
 
@@ -207,20 +260,27 @@ app.post('/resetPassword', async (req, res) => {
 
     // Trim whitespace
     const trimmedEmail = email.trim();
+    const trimmedCode = resetCode.trim();
     const trimmedPassword = newPassword.trim();
 
-    // Find user by email
-    const user = await User.findOne({ email: trimmedEmail });
+    // Find user by email with valid reset code
+    const user = await User.findOne({
+      email: trimmedEmail,
+      resetPasswordToken: trimmedCode,
+      resetPasswordExpires: { $gt: new Date() } // Code not expired
+    });
 
     if (!user) {
-      return res.status(404).json({
+      return res.status(400).json({
         success: false,
-        message: 'No account found with this email address'
+        message: 'Invalid or expired reset code. Please request a new one.'
       });
     }
 
-    // Update password (the pre-save hook will hash it automatically)
+    // Update password and clear reset token
     user.password = trimmedPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
     await user.save();
 
     return res.status(200).json({

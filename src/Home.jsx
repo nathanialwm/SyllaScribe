@@ -11,8 +11,9 @@ function Home() {
   const [user, setUser] = useState(null);
   const [courses, setCourses] = useState([])
   const [sectionTitle, setSectionTitle] = useState('Add New Class');
-   const [loading, setLoading] = useState(false) 
-  const [error, setError] = useState(null)  
+  const [loading, setLoading] = useState(false) 
+  const [error, setError] = useState(null)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);  
    useEffect(() => {
     const getUser = () => {
       try {

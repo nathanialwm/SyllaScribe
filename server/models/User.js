@@ -12,7 +12,9 @@ const userSchema = new Schema({
     darkMode: { type: Boolean, default: false },
     notifications: { type: Boolean, default: true }
   },
-  admin: { type: Boolean, default: false }
+  admin: { type: Boolean, default: false },
+  resetPasswordToken: { type: String },
+  resetPasswordExpires: { type: Date }
 });
 
 // Hash password before saving

@@ -9,7 +9,9 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
   const [remember, setRemember] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [forgotPasswordMode, setForgotPasswordMode] = useState(false);
+  const [resetStep, setResetStep] = useState(1); // 1 = request code, 2 = enter code and reset
   const [resetEmail, setResetEmail] = useState('');
+  const [resetCode, setResetCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   
@@ -93,10 +95,32 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
     }
   };
 
-  const handleForgotPassword = async (e) => {
+  const handleRequestResetCode = async (e) => {
     e.preventDefault();
     if (!resetEmail) {
       alert("Please enter your email address");
+      return;
+    }
+
+    try {
+      const response = await axios.post('http://localhost:5000/requestPasswordReset', {
+        email: resetEmail.trim()
+      });
+      if (response.data.success) {
+        alert(response.data.message);
+        setResetStep(2); // Move to step 2: enter code
+      } else {
+        alert(response.data.message || "Failed to request reset code");
+      }
+    } catch (error) {
+      alert(error.response?.data?.message || error.message || "An error occurred while requesting reset code");
+    }
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    if (!resetCode) {
+      alert("Please enter the verification code");
       return;
     }
     if (!newPassword || !confirmNewPassword) {
@@ -115,12 +139,15 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
     try {
       const response = await axios.post('http://localhost:5000/resetPassword', {
         email: resetEmail.trim(),
+        resetCode: resetCode.trim(),
         newPassword: newPassword.trim()
       });
       if (response.data.success) {
         alert("Password reset successfully! You can now log in with your new password.");
         setForgotPasswordMode(false);
+        setResetStep(1);
         setResetEmail('');
+        setResetCode('');
         setNewPassword('');
         setConfirmNewPassword('');
         onSwitchMode('login');
@@ -128,8 +155,8 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
         alert(response.data.message || "Failed to reset password");
       }
     } catch (error) {
-      if (error.response?.status === 404) {
-        alert("No account found with this email address");
+      if (error.response?.status === 400) {
+        alert(error.response?.data?.message || "Invalid or expired reset code");
       } else {
         alert(error.response?.data?.message || error.message || "An error occurred while resetting password");
       }
@@ -159,61 +186,103 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
               {forgotPasswordMode ? (
                 <div>
                   <h4 className="mb-4">Reset Password</h4>
-                  <form onSubmit={handleForgotPassword}>
-                    <div className="mb-3">
-                      <label htmlFor="resetEmail" className="form-label">Email address</label>
-                      <input
-                        type="email"
-                        className="form-control"
-                        id="resetEmail"
-                        placeholder="Enter your email"
-                        value={resetEmail}
-                        onChange={(e) => setResetEmail(e.target.value)}
-                        required
-                      />
-                    </div>
-                    <div className="mb-3">
-                      <label htmlFor="newPassword" className="form-label">New Password</label>
-                      <input
-                        type="password"
-                        className="form-control"
-                        id="newPassword"
-                        placeholder="Enter new password"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        required
-                      />
-                    </div>
-                    <div className="mb-3">
-                      <label htmlFor="confirmNewPassword" className="form-label">Confirm New Password</label>
-                      <input
-                        type="password"
-                        className="form-control"
-                        id="confirmNewPassword"
-                        placeholder="Confirm new password"
-                        value={confirmNewPassword}
-                        onChange={(e) => setConfirmNewPassword(e.target.value)}
-                        required
-                      />
-                    </div>
-                    <button type="submit" className="btn btn-primary w-100 mb-3">
-                      Reset Password
-                    </button>
-                    <div className="text-center">
-                      <button
-                        type="button"
-                        className="btn btn-link p-0"
-                        onClick={() => {
-                          setForgotPasswordMode(false);
-                          setResetEmail('');
-                          setNewPassword('');
-                          setConfirmNewPassword('');
-                        }}
-                      >
-                        Back to Login
+                  {resetStep === 1 ? (
+                    <form onSubmit={handleRequestResetCode}>
+                      <div className="alert alert-info" role="alert">
+                        Enter your email address to receive a verification code. The code will expire in 15 minutes.
+                      </div>
+                      <div className="mb-3">
+                        <label htmlFor="resetEmail" className="form-label">Email address</label>
+                        <input
+                          type="email"
+                          className="form-control"
+                          id="resetEmail"
+                          placeholder="Enter your email"
+                          value={resetEmail}
+                          onChange={(e) => setResetEmail(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <button type="submit" className="btn btn-primary w-100 mb-3">
+                        Send Verification Code
                       </button>
-                    </div>
-                  </form>
+                      <div className="text-center">
+                        <button
+                          type="button"
+                          className="btn btn-link p-0"
+                          onClick={() => {
+                            setForgotPasswordMode(false);
+                            setResetStep(1);
+                            setResetEmail('');
+                          }}
+                        >
+                          Back to Login
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <form onSubmit={handleForgotPassword}>
+                      <div className="alert alert-info" role="alert">
+                        Check your email for the 6-digit verification code. (For development: check server console)
+                      </div>
+                      <div className="mb-3">
+                        <label htmlFor="resetCode" className="form-label">Verification Code</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          id="resetCode"
+                          placeholder="Enter 6-digit code"
+                          value={resetCode}
+                          onChange={(e) => setResetCode(e.target.value)}
+                          maxLength="6"
+                          pattern="[0-9]{6}"
+                          required
+                        />
+                        <small className="form-text text-muted">Enter the 6-digit code sent to your email</small>
+                      </div>
+                      <div className="mb-3">
+                        <label htmlFor="newPassword" className="form-label">New Password</label>
+                        <input
+                          type="password"
+                          className="form-control"
+                          id="newPassword"
+                          placeholder="Enter new password"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="mb-3">
+                        <label htmlFor="confirmNewPassword" className="form-label">Confirm New Password</label>
+                        <input
+                          type="password"
+                          className="form-control"
+                          id="confirmNewPassword"
+                          placeholder="Confirm new password"
+                          value={confirmNewPassword}
+                          onChange={(e) => setConfirmNewPassword(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <button type="submit" className="btn btn-primary w-100 mb-3">
+                        Reset Password
+                      </button>
+                      <div className="text-center">
+                        <button
+                          type="button"
+                          className="btn btn-link p-0"
+                          onClick={() => {
+                            setResetStep(1);
+                            setResetCode('');
+                            setNewPassword('');
+                            setConfirmNewPassword('');
+                          }}
+                        >
+                          Request New Code
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </div>
               ) : mode === 'login' ? (
                 <div>
@@ -255,6 +324,19 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
                     </div>
                     <button type="submit" className="btn btn-primary w-100 mb-3"
                     onClick={(event)  => handleLogin(event, email, password, remember)}>Login</button>
+                    <div className="text-center mb-2">
+                      <button
+                        type="button"
+                        className="btn btn-link p-0"
+                        onClick={() => {
+                          setForgotPasswordMode(true);
+                          setResetStep(1);
+                          setSuccessMessage('');
+                        }}
+                      >
+                        Forgot Password?
+                      </button>
+                    </div>
                     <div className="text-center">
                       <p className="mb-0">Don't have an account?</p>
                       <button
