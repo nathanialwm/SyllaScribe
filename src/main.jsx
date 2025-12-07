@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import 'bootstrap/dist/js/bootstrap.bundle.min.js'
 import './index.css'
+import './services/axiosConfig'
 import App from './App.jsx'
 import { ThemeProvider } from './components/ThemeContext.jsx';
 import Choice from './Choice.jsx'

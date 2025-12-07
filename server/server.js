@@ -65,8 +65,13 @@ app.post('/createUser', async (req, res) => {
       });
     }
 
+    // Trim whitespace from inputs
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+    const trimmedName = name.trim();
+
     // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ email: trimmedEmail });
     if (existingUser) {
       console.log("Username already exists")
       return res.status(409).json({ 
@@ -77,9 +82,9 @@ app.post('/createUser', async (req, res) => {
 
   
   const newUser = new User({
-  email,
-  password,
-  name
+  email: trimmedEmail,
+  password: trimmedPassword,
+  name: trimmedName
   
 });
 
@@ -137,8 +142,12 @@ app.post('/getUser', async (req, res) => {
       });
     }
 
+    // Trim whitespace from email and password
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+
     // Find user by email
-    const user = await User.findOne({ email: email });
+    const user = await User.findOne({ email: trimmedEmail });
 
     if (!user) {
       return res.status(401).json({
@@ -148,7 +157,7 @@ app.post('/getUser', async (req, res) => {
     }
 
     // Use bcrypt to compare passwords
-    const isPasswordValid = await user.comparePassword(password);
+    const isPasswordValid = await user.comparePassword(trimmedPassword);
 
     if (isPasswordValid) {
       // Remove password from response
@@ -176,6 +185,59 @@ app.post('/getUser', async (req, res) => {
     });
   }
 })
+
+app.post('/resetPassword', async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    // Validate required fields
+    if (!email || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and new password are required'
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters long'
+      });
+    }
+
+    // Trim whitespace
+    const trimmedEmail = email.trim();
+    const trimmedPassword = newPassword.trim();
+
+    // Find user by email
+    const user = await User.findOne({ email: trimmedEmail });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No account found with this email address'
+      });
+    }
+
+    // Update password (the pre-save hook will hash it automatically)
+    user.password = trimmedPassword;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password reset successfully'
+    });
+
+  } catch (error) {
+    console.error('Reset password error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error during password reset',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+})
+
 app.get('/getCourses', async (req, res) => {
   try {
     // Find all courses

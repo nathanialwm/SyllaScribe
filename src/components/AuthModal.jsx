@@ -8,6 +8,10 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
   const [termsAgree, setTermsAgree] = useState(false);
   const [remeber, setRemeber] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [forgotPasswordMode, setForgotPasswordMode] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
   
   const handleSignUp = async (event, name, email, confirmPassword, password, termsAgree ) => {
      event.preventDefault(); 
@@ -53,7 +57,13 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
         alert(response.data.message || "Sign up failed");
       }
     } catch (error) {
-      alert(error);
+      if (error.response?.status === 409) {
+        alert("An account with this email already exists. Please log in instead.");
+      } else if (error.response?.data?.message) {
+        alert(error.response.data.message);
+      } else {
+        alert(error.message || "An error occurred during sign up");
+      }
     }
   };
   const handleLogin = async (event, email, password, remeber) => {
@@ -69,7 +79,54 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
         alert(response.data.message || "Sign in failed");
       }
     } catch (error) {
-      alert(error);
+      if (error.response?.status === 401) {
+        alert(error.response?.data?.message || "Invalid email or password");
+      } else {
+        alert(error.message || "An error occurred during login");
+      }
+    }
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    if (!resetEmail) {
+      alert("Please enter your email address");
+      return;
+    }
+    if (!newPassword || !confirmNewPassword) {
+      alert("Please enter and confirm your new password");
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      alert("Passwords do not match");
+      return;
+    }
+    if (newPassword.length < 6) {
+      alert("Password must be at least 6 characters long");
+      return;
+    }
+
+    try {
+      const response = await axios.post('http://localhost:5000/resetPassword', {
+        email: resetEmail.trim(),
+        newPassword: newPassword.trim()
+      });
+      if (response.data.success) {
+        alert("Password reset successfully! You can now log in with your new password.");
+        setForgotPasswordMode(false);
+        setResetEmail('');
+        setNewPassword('');
+        setConfirmNewPassword('');
+        onSwitchMode('login');
+      } else {
+        alert(response.data.message || "Failed to reset password");
+      }
+    } catch (error) {
+      if (error.response?.status === 404) {
+        alert("No account found with this email address");
+      } else {
+        alert(error.response?.data?.message || error.message || "An error occurred while resetting password");
+      }
     }
   };
   if (!mode) return null;
@@ -93,7 +150,66 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
               ></button>
             </div>
             <div className="modal-body">
-              {mode === 'login' ? (
+              {forgotPasswordMode ? (
+                <div>
+                  <h4 className="mb-4">Reset Password</h4>
+                  <form onSubmit={handleForgotPassword}>
+                    <div className="mb-3">
+                      <label htmlFor="resetEmail" className="form-label">Email address</label>
+                      <input
+                        type="email"
+                        className="form-control"
+                        id="resetEmail"
+                        placeholder="Enter your email"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="mb-3">
+                      <label htmlFor="newPassword" className="form-label">New Password</label>
+                      <input
+                        type="password"
+                        className="form-control"
+                        id="newPassword"
+                        placeholder="Enter new password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="mb-3">
+                      <label htmlFor="confirmNewPassword" className="form-label">Confirm New Password</label>
+                      <input
+                        type="password"
+                        className="form-control"
+                        id="confirmNewPassword"
+                        placeholder="Confirm new password"
+                        value={confirmNewPassword}
+                        onChange={(e) => setConfirmNewPassword(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <button type="submit" className="btn btn-primary w-100 mb-3">
+                      Reset Password
+                    </button>
+                    <div className="text-center">
+                      <button
+                        type="button"
+                        className="btn btn-link p-0"
+                        onClick={() => {
+                          setForgotPasswordMode(false);
+                          setResetEmail('');
+                          setNewPassword('');
+                          setConfirmNewPassword('');
+                        }}
+                      >
+                        Back to Login
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              ) : mode === 'login' ? (
                 <div>
                   <h4 className="mb-4">Login to SyllaScribe</h4>
                   {successMessage && (
@@ -133,6 +249,18 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
                     </div>
                     <button type="submit" className="btn btn-primary w-100 mb-3"
                     onClick={(event)  => handleLogin(event, email, password, remeber)}>Login</button>
+                    <div className="text-center mb-2">
+                      <button
+                        type="button"
+                        className="btn btn-link p-0"
+                        onClick={() => {
+                          setForgotPasswordMode(true);
+                          setSuccessMessage('');
+                        }}
+                      >
+                        Forgot Password?
+                      </button>
+                    </div>
                     <div className="text-center">
                       <p className="mb-0">Don't have an account?</p>
                       <button

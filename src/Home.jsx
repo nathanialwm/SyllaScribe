@@ -4,22 +4,25 @@ import axios from 'axios'
 import { Sun, Moon } from 'lucide-react';
 import { useTheme } from './components/ThemeContext';
 import GradeTracker from "./components/GradeTracker";
+import SettingsModal from './components/SettingsModal';
 
 function Home() {
   const { theme, toggleTheme } = useTheme();
   const [courses, setCourses] = useState([])
   const [sectionTitle, setSectionTitle] = useState('Add New Class');
-   const [loading, setLoading] = useState(false) 
-  const [error, setError] = useState(null)  
+  const [loading, setLoading] = useState(false) 
+  const [error, setError] = useState(null)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  
   function handleSignOut() {
     localStorage.removeItem('currentUser');
     window.location.reload();
   }
   function handleSettings() {
-    alert("Settings feature coming soon!");
+    setIsSettingsOpen(true);
   }
  
-   useEffect(() => {
+  useEffect(() => {
     const fetchCourses = async () => {
       try {
         setLoading(true)
@@ -35,6 +38,13 @@ function Home() {
     }
     
     fetchCourses()
+  }, [])
+
+  useEffect(() => {
+    // Apply font size on mount
+    const fontSize = localStorage.getItem('fontSize') || 'medium';
+    document.documentElement.style.fontSize = 
+      fontSize === 'small' ? '14px' : fontSize === 'medium' ? '16px' : '18px';
   }, [])
   return (
     <>
@@ -140,7 +150,7 @@ function Home() {
           </div>
         </div>
       </main>
-      
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
     </>
   )
