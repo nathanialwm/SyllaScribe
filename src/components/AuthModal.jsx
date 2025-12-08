@@ -9,7 +9,7 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
   const [remember, setRemember] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [forgotPasswordMode, setForgotPasswordMode] = useState(false);
-  const [resetStep, setResetStep] = useState(1); // 1 = request code, 2 = enter code and reset
+  const [resetStep, setResetStep] = useState(1); 
   const [resetEmail, setResetEmail] = useState('');
   const [resetCode, setResetCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
