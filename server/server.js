@@ -360,7 +360,7 @@ app.get('/getEnrolledCourses', async (req, res) => {
 });
 app.post('/createCourse', async (req, res) => {
   try {
-    const { title } = req.body; 
+    const { title } = req.body;
     // Validate required fields
     if (!title) {
       return res.status(400).json({
@@ -375,7 +375,7 @@ app.post('/createCourse', async (req, res) => {
     });
     // Save to database
     const savedCourse = await newCourse.save();
-    // Return success response  
+    // Return success response
     res.status(201).json({
       success: true,
       message: 'Course created successfully',

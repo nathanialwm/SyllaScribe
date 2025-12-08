@@ -47,25 +47,39 @@ function Home() {
   function handleSettings() {
     setIsSettingsOpen(true);
   }
- 
-  useEffect(() => {
+
+  // Fetch enrolled courses function (extracted so it can be called manually)
   const fetchCourses = async () => {
+    if (!user || !user._id) {
+      setCourses([]);
+      return;
+    }
+
     try {
       setLoading(true);
-      const response = await axios.get('http://localhost:5000/getCourses');
-      setCourses(response.data);
-      setError(null);
+      const response = await axios.get('http://localhost:5000/getEnrolledCourses', {
+        params: { userId: user._id }
+      });
+
+      if (response.data.success) {
+        setCourses(response.data.courses || []);
+        setError(null);
+      } else {
+        setError(response.data.message || 'Failed to load courses');
+        setCourses([]);
+      }
     } catch (err) {
-      setError('Failed to load courses');
-      console.error('Error fetching courses:', err);
+      setError('Failed to load enrolled courses');
+      console.error('Error fetching enrolled courses:', err);
       setCourses([]);
     } finally {
       setLoading(false);
     }
   };
 
-  fetchCourses();
-}, []);
+  useEffect(() => {
+    fetchCourses();
+  }, [user]);
 
 
   useEffect(() => {
@@ -205,7 +219,7 @@ function Home() {
                 <h5 className="mb-0">{sectionTitle}</h5>
               </div>
               <div className="card-body">
-                <GradeTracker onClassCreated={fetchEnrolledCourses} />
+                <GradeTracker onClassCreated={fetchCourses} />
               </div>
             </div>
           </div>
