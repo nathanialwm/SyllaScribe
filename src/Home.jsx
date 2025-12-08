@@ -46,23 +46,39 @@ function Home() {
     alert("Settings feature coming soon!");
   }
  
-   useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        setLoading(true)
-        const response = await axios.get('http://localhost:5000/getCourses')
-        setCourses(response.data)
-        setError(null)
-      } catch (err) {
-        setError('Failed to load courses')
-        console.error('Error fetching courses:', err)
-      } finally {
-        setLoading(false)
-      }
+   // Fetch enrolled courses function (extracted so it can be called manually)
+  const fetchEnrolledCourses = async () => {
+    if (!user || !user._id) {
+      setCourses([]);
+      return;
     }
-    
-    fetchCourses()
-  }, [])
+
+    try {
+      setLoading(true);
+      // Use the new endpoint with userId
+      const response = await axios.get(`http://localhost:5000/getEnrolledCourses`, {
+        params: { userId: user._id }
+    });
+
+      if (response.data.success) {
+        setCourses(response.data.courses);
+        setError(null);
+      } else {
+        setError(response.data.message || 'Failed to load courses');
+        setCourses([]);
+      }
+    } catch (err) {
+      setError('Failed to load enrolled courses');
+      console.error('Error fetching enrolled courses:', err);
+      setCourses([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchEnrolledCourses();
+  }, [user]); 
   return (
     <>
       <style>{`
@@ -91,7 +107,7 @@ function Home() {
        <nav className="navbar navbar-expand-lg" style={{ backgroundColor: 'var(--primary)' }}>
       <div className="container-fluid px-3 px-md-4 px-lg-5">
         <a className="navbar-brand fw-bold fs-4" href="#" onClick={(e) => e.preventDefault()}>
-            Welcome to SyllaScribe {user && user.name ? user.name : 'Guest'}!
+            Welcome to SyllaScribe {user && user.name ? user.name : 'N/A'}!
         </a>
         <button 
           className="navbar-toggler" 
@@ -149,7 +165,40 @@ function Home() {
               
               </div>
               <div className="card-body">
-                {/* Empty - Add content later */}
+                 {error && (
+            <div className="alert alert-danger">
+              {error}
+            </div>
+          )}
+          
+          {!loading && courses.length === 0 ? (
+            <div className="text-center py-4">
+              <p className="text-muted">No classes found</p>
+              <button className="btn btn-sm btn-outline-secondary"
+                    onClick={() =>setSectionTitle(`Add New Class`)}>
+                    Add new class
+                  </button>
+            </div>
+          ) : (
+            <div className="list-group">
+              {courses.map((course) => (
+                <div 
+                  key={course._id || course.courseId} 
+                  className="list-group-item d-flex justify-content-between align-items-center"
+                >
+                  <span>{course.title || course.ClassName || 'Untitled Course'}</span>
+                  <button className="btn btn-sm btn-outline-secondary"
+                    onClick={() =>setSectionTitle(`Viewing ${course.title || course.ClassName } `)}>
+                    View
+                  </button>
+                </div>
+              ))}
+              <button className="btn btn-sm btn-outline-secondary"
+                    onClick={() =>setSectionTitle(`Add New Class`)}>
+                    Add new class
+                  </button>
+            </div>
+          )}
               </div>
             </div>
           </div>
@@ -161,7 +210,7 @@ function Home() {
                 <h5 className="mb-0">{sectionTitle}</h5>
               </div>
               <div className="card-body">
-                <GradeTracker />
+                <GradeTracker onClassCreated={fetchEnrolledCourses} />
               </div>
             </div>
           </div>
