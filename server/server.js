@@ -65,8 +65,13 @@ app.post('/createUser', async (req, res) => {
       });
     }
 
+    // Trim whitespace from inputs
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+    const trimmedName = name.trim();
+
     // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ email: trimmedEmail });
     if (existingUser) {
       console.log("Username already exists")
       return res.status(409).json({ 
@@ -77,9 +82,9 @@ app.post('/createUser', async (req, res) => {
 
   
   const newUser = new User({
-  email,
-  password,
-  name
+  email: trimmedEmail,
+  password: trimmedPassword,
+  name: trimmedName
   
 });
 
@@ -137,8 +142,12 @@ app.post('/getUser', async (req, res) => {
       });
     }
 
+    // Trim whitespace from email and password
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+
     // Find user by email
-    const user = await User.findOne({ email: email });
+    const user = await User.findOne({ email: trimmedEmail });
 
     if (!user) {
       return res.status(401).json({
@@ -148,7 +157,7 @@ app.post('/getUser', async (req, res) => {
     }
 
     // Use bcrypt to compare passwords
-    const isPasswordValid = await user.comparePassword(password);
+    const isPasswordValid = await user.comparePassword(trimmedPassword);
 
     if (isPasswordValid) {
       // Remove password from response
@@ -176,22 +185,129 @@ app.post('/getUser', async (req, res) => {
     });
   }
 })
+
+// Request password reset - generates verification code
+app.post('/requestPasswordReset', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
+
+    const trimmedEmail = email.trim();
+    const user = await User.findOne({ email: trimmedEmail });
+
+    if (!user) {
+      // Don't reveal if email exists for security
+      return res.status(200).json({
+        success: true,
+        message: 'If an account exists with this email, a reset code has been sent.'
+      });
+    }
+
+    // Generate 6-digit verification code
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Store code and expiration (15 minutes)
+    user.resetPasswordToken = resetCode;
+    user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+    await user.save();
+
+    // In production, send email here. For now, log it (remove in production!)
+    console.log(`\n=== PASSWORD RESET CODE ===`);
+    console.log(`Email: ${trimmedEmail}`);
+    console.log(`Code: ${resetCode}`);
+    console.log(`Expires in: 15 minutes`);
+    console.log(`===========================\n`);
+    
+    return res.status(200).json({
+      success: true,
+      message: 'If an account exists with this email, a reset code has been sent. Check your email. (For development: code is in server console)'
+    });
+
+  } catch (error) {
+    console.error('Request password reset error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error during password reset request'
+    });
+  }
+});
+
+// Reset password with verification code
+app.post('/resetPassword', async (req, res) => {
+  try {
+    const { email, resetCode, newPassword } = req.body;
+
+    // Validate required fields
+    if (!email || !resetCode || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email, reset code, and new password are required'
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters long'
+      });
+    }
+
+    // Trim whitespace
+    const trimmedEmail = email.trim();
+    const trimmedCode = resetCode.trim();
+    const trimmedPassword = newPassword.trim();
+
+    // Find user by email with valid reset code
+    const user = await User.findOne({
+      email: trimmedEmail,
+      resetPasswordToken: trimmedCode,
+      resetPasswordExpires: { $gt: new Date() } // Code not expired
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired reset code. Please request a new one.'
+      });
+    }
+
+    // Update password and clear reset token
+    user.password = trimmedPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password reset successfully'
+    });
+
+  } catch (error) {
+    console.error('Reset password error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error during password reset',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+})
+
 app.get('/getCourses', async (req, res) => {
   try {
     // Find all courses
     const courses = await Course.find();
     
-    if (!courses || courses.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'No courses found'
-      });
-    }
-    
+    // Return 200 with empty array if no courses found (not an error)
     return res.status(200).json({
       success: true,
-      message: 'Courses retrieved successfully',
-      courses: courses
+      message: courses.length === 0 ? 'No courses found' : 'Courses retrieved successfully',
+      courses: courses || []
     });
 
   } catch (error) {
@@ -219,12 +335,15 @@ app.get('/getEnrolledCourses', async (req, res) => {
       .sort({ enrolledAt: -1 });
     
     // Transform to include enrollment data
-    const enrolledCourses = enrollments.map(enrollment => ({
-      ...enrollment.courseId.toObject(),
-      enrollmentId: enrollment._id,
-      enrolledAt: enrollment.enrolledAt,
-      enrollmentGrades: enrollment.grades
-    }));
+    // Filter out any enrollments with null/missing courseId (schema mismatch protection)
+    const enrolledCourses = enrollments
+      .filter(enrollment => enrollment.courseId != null) // Safety check for schema issues
+      .map(enrollment => ({
+        ...enrollment.courseId.toObject(),
+        enrollmentId: enrollment._id,
+        enrolledAt: enrollment.enrolledAt,
+        enrollmentGrades: enrollment.grades || []
+      }));
     
     res.status(200).json({
       success: true,
@@ -241,7 +360,7 @@ app.get('/getEnrolledCourses', async (req, res) => {
 });
 app.post('/createCourse', async (req, res) => {
   try {
-    const { title } = req.body; 
+    const { title } = req.body;
     // Validate required fields
     if (!title) {
       return res.status(400).json({
@@ -256,7 +375,7 @@ app.post('/createCourse', async (req, res) => {
     });
     // Save to database
     const savedCourse = await newCourse.save();
-    // Return success response  
+    // Return success response
     res.status(201).json({
       success: true,
       message: 'Course created successfully',

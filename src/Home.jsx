@@ -4,14 +4,16 @@ import axios from 'axios'
 import { Sun, Moon } from 'lucide-react';
 import { useTheme } from './components/ThemeContext';
 import GradeTracker from "./components/GradeTracker";
+import SettingsModal from './components/SettingsModal';
 
 function Home() {
   const { theme, toggleTheme } = useTheme();
   const [user, setUser] = useState(null);
   const [courses, setCourses] = useState([])
   const [sectionTitle, setSectionTitle] = useState('Add New Class');
-   const [loading, setLoading] = useState(false) 
-  const [error, setError] = useState(null)  
+  const [loading, setLoading] = useState(false) 
+  const [error, setError] = useState(null)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);  
    useEffect(() => {
     const getUser = () => {
       try {
@@ -43,11 +45,11 @@ function Home() {
     window.location.reload();
   }
   function handleSettings() {
-    alert("Settings feature coming soon!");
+    setIsSettingsOpen(true);
   }
- 
-   // Fetch enrolled courses function (extracted so it can be called manually)
-  const fetchEnrolledCourses = async () => {
+
+  // Fetch enrolled courses function (extracted so it can be called manually)
+  const fetchCourses = async () => {
     if (!user || !user._id) {
       setCourses([]);
       return;
@@ -55,13 +57,12 @@ function Home() {
 
     try {
       setLoading(true);
-      // Use the new endpoint with userId
-      const response = await axios.get(`http://localhost:5000/getEnrolledCourses`, {
+      const response = await axios.get('http://localhost:5000/getEnrolledCourses', {
         params: { userId: user._id }
-    });
+      });
 
       if (response.data.success) {
-        setCourses(response.data.courses);
+        setCourses(response.data.courses || []);
         setError(null);
       } else {
         setError(response.data.message || 'Failed to load courses');
@@ -77,8 +78,16 @@ function Home() {
   };
 
   useEffect(() => {
-    fetchEnrolledCourses();
-  }, [user]); 
+    fetchCourses();
+  }, [user]);
+
+
+  useEffect(() => {
+    // Apply font size on mount
+    const fontSize = localStorage.getItem('fontSize') || 'medium';
+    document.documentElement.style.fontSize = 
+      fontSize === 'small' ? '14px' : fontSize === 'medium' ? '16px' : '18px';
+  }, [])
   return (
     <>
       <style>{`
@@ -101,6 +110,40 @@ function Home() {
         #classes-header h5,
         #add-class-header h5 {
           color: ${theme === 'light' ? '#000000' : '#ffffff'} !important;
+        }
+        /* Classes section card styling */
+        #classes-card {
+          background-color: ${theme === 'light' ? '#ffffff' : '#1a1a1a'} !important;
+          border-color: ${theme === 'light' ? '#dee2e6' : '#404040'} !important;
+        }
+        #classes-card .card-body {
+          background-color: ${theme === 'light' ? '#ffffff' : '#1a1a1a'} !important;
+          color: ${theme === 'light' ? '#000000' : '#ffffff'} !important;
+        }
+        #classes-card .text-muted {
+          color: ${theme === 'light' ? '#6c757d' : '#adb5bd'} !important;
+        }
+        #classes-card .list-group-item {
+          background-color: ${theme === 'light' ? '#ffffff' : '#2d2d2d'} !important;
+          border-color: ${theme === 'light' ? '#dee2e6' : '#404040'} !important;
+          color: ${theme === 'light' ? '#000000' : '#ffffff'} !important;
+        }
+        #classes-card .list-group-item:hover {
+          background-color: ${theme === 'light' ? '#f8f9fa' : '#3a3a3a'} !important;
+        }
+        #classes-card .btn-outline-secondary {
+          color: ${theme === 'light' ? '#6c757d' : '#adb5bd'} !important;
+          border-color: ${theme === 'light' ? '#6c757d' : '#6c757d'} !important;
+        }
+        #classes-card .btn-outline-secondary:hover {
+          color: ${theme === 'light' ? '#ffffff' : '#000000'} !important;
+          background-color: ${theme === 'light' ? '#6c757d' : '#adb5bd'} !important;
+          border-color: ${theme === 'light' ? '#6c757d' : '#adb5bd'} !important;
+        }
+        #classes-card .alert-danger {
+          background-color: ${theme === 'light' ? '#f8d7da' : '#4a1f23'} !important;
+          border-color: ${theme === 'light' ? '#f5c2c7' : '#6a2a2f'} !important;
+          color: ${theme === 'light' ? '#842029' : '#ea868f'} !important;
         }
       `}</style>
       <div className="app-root">
@@ -154,7 +197,7 @@ function Home() {
        <div className="row">
           {/* Left Section - Empty */}
           <div className="col-md-6">
-            <div className="card shadow-sm border">
+            <div id="classes-card" className="card shadow-sm border">
               <div id="classes-header" className="card-header" style={{ backgroundColor: theme === 'light' ? '#f8f9fa' : '#212529' }}>
                  <h5 className="mb-0">Classes ({courses.length})</h5>
                 {loading && (
@@ -210,13 +253,13 @@ function Home() {
                 <h5 className="mb-0">{sectionTitle}</h5>
               </div>
               <div className="card-body">
-                <GradeTracker onClassCreated={fetchEnrolledCourses} />
+                <GradeTracker onClassCreated={fetchCourses} />
               </div>
             </div>
           </div>
         </div>
       </main>
-      
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
     </>
   )
