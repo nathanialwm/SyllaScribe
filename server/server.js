@@ -471,3 +471,82 @@ app.post('/enrollCourse', async (req, res) => {
     });
   }
 });
+<<<<<<< HEAD
+=======
+app.delete('/deleteEnrollment/:enrollmentId', async (req, res) => {
+  try {
+    const { enrollmentId } = req.params;
+    
+    if (!enrollmentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'enrollmentId is required'
+      });
+    }
+    
+    const deletedEnrollment = await Enrollment.findByIdAndDelete(enrollmentId);
+    
+    if (!deletedEnrollment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Enrollment not found'
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: 'Enrollment deleted successfully'
+    });
+    
+  } catch (error) {
+    console.error('Error deleting enrollment:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while deleting enrollment'
+    });
+  }
+});
+app.delete('/deleteCourseByCustomId/:customCourseId', async (req, res) => {
+  try {
+    const { customCourseId } = req.params;
+    
+    console.log(`Attempting to delete course with custom ID: ${customCourseId}`);
+    
+    // Find the course by custom courseId field
+    const course = await Course.findOne({ 
+      courseId: customCourseId  // Match the custom ID field
+    });
+    
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        message: `Course with ID ${customCourseId} not found`
+      });
+    }
+    
+    // Delete the course using its MongoDB _id
+    await Course.findByIdAndDelete(course._id);
+    
+    // Optional: Also delete related enrollments
+    await Enrollment.deleteMany({ courseId: course._id });
+    
+    res.status(200).json({
+      success: true,
+      message: 'Course deleted successfully',
+      deletedCourse: {
+        _id: course._id,
+        courseId: course.courseId,
+        title: course.title
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error deleting course by custom ID:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while deleting course',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+>>>>>>> d816206 (Course update and delete works)

@@ -5,6 +5,10 @@ import { Sun, Moon } from 'lucide-react';
 import { useTheme } from './components/ThemeContext';
 import GradeTracker from "./components/GradeTracker";
 import SettingsModal from './components/SettingsModal';
+<<<<<<< HEAD
+=======
+import UserGradeTracker from './components/UserGradeTracker';
+>>>>>>> d816206 (Course update and delete works)
 
 function Home() {
   const { theme, toggleTheme } = useTheme();
@@ -253,7 +257,13 @@ function Home() {
                 <h5 className="mb-0">{sectionTitle}</h5>
               </div>
               <div className="card-body">
+<<<<<<< HEAD
                 <GradeTracker onClassCreated={fetchCourses} />
+=======
+                <UserGradeTracker 
+                selectedCourseData={selectedCourseData}
+                />
+>>>>>>> d816206 (Course update and delete works)
               </div>
             </div>
           </div>
