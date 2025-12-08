@@ -471,8 +471,6 @@ app.post('/enrollCourse', async (req, res) => {
     });
   }
 });
-<<<<<<< HEAD
-=======
 app.delete('/deleteEnrollment/:enrollmentId', async (req, res) => {
   try {
     const { enrollmentId } = req.params;
@@ -549,4 +547,3 @@ app.delete('/deleteCourseByCustomId/:customCourseId', async (req, res) => {
     });
   }
 });
->>>>>>> d816206 (Course update and delete works)
