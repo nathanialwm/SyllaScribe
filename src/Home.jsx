@@ -111,6 +111,40 @@ function Home() {
         #add-class-header h5 {
           color: ${theme === 'light' ? '#000000' : '#ffffff'} !important;
         }
+        /* Classes section card styling */
+        #classes-card {
+          background-color: ${theme === 'light' ? '#ffffff' : '#1a1a1a'} !important;
+          border-color: ${theme === 'light' ? '#dee2e6' : '#404040'} !important;
+        }
+        #classes-card .card-body {
+          background-color: ${theme === 'light' ? '#ffffff' : '#1a1a1a'} !important;
+          color: ${theme === 'light' ? '#000000' : '#ffffff'} !important;
+        }
+        #classes-card .text-muted {
+          color: ${theme === 'light' ? '#6c757d' : '#adb5bd'} !important;
+        }
+        #classes-card .list-group-item {
+          background-color: ${theme === 'light' ? '#ffffff' : '#2d2d2d'} !important;
+          border-color: ${theme === 'light' ? '#dee2e6' : '#404040'} !important;
+          color: ${theme === 'light' ? '#000000' : '#ffffff'} !important;
+        }
+        #classes-card .list-group-item:hover {
+          background-color: ${theme === 'light' ? '#f8f9fa' : '#3a3a3a'} !important;
+        }
+        #classes-card .btn-outline-secondary {
+          color: ${theme === 'light' ? '#6c757d' : '#adb5bd'} !important;
+          border-color: ${theme === 'light' ? '#6c757d' : '#6c757d'} !important;
+        }
+        #classes-card .btn-outline-secondary:hover {
+          color: ${theme === 'light' ? '#ffffff' : '#000000'} !important;
+          background-color: ${theme === 'light' ? '#6c757d' : '#adb5bd'} !important;
+          border-color: ${theme === 'light' ? '#6c757d' : '#adb5bd'} !important;
+        }
+        #classes-card .alert-danger {
+          background-color: ${theme === 'light' ? '#f8d7da' : '#4a1f23'} !important;
+          border-color: ${theme === 'light' ? '#f5c2c7' : '#6a2a2f'} !important;
+          color: ${theme === 'light' ? '#842029' : '#ea868f'} !important;
+        }
       `}</style>
       <div className="app-root">
        <nav className="navbar navbar-expand-lg" style={{ backgroundColor: 'var(--primary)' }}>
@@ -163,7 +197,7 @@ function Home() {
        <div className="row">
           {/* Left Section - Empty */}
           <div className="col-md-6">
-            <div className="card shadow-sm border">
+            <div id="classes-card" className="card shadow-sm border">
               <div id="classes-header" className="card-header" style={{ backgroundColor: theme === 'light' ? '#f8f9fa' : '#212529' }}>
                  <h5 className="mb-0">Classes ({courses.length})</h5>
                 {loading && (
