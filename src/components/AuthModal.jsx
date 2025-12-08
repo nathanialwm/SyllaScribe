@@ -108,7 +108,7 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
       });
       if (response.data.success) {
         alert(response.data.message);
-        setResetStep(2); // Move to step 2: enter code
+        setResetStep(2);
       } else {
         alert(response.data.message || "Failed to request reset code");
       }
