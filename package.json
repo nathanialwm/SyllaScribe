@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "server": "node server/server.js",
-    "server:dev": "nodemon server/server.js"
+    "server:dev": "nodemon server/server.js",
+    "migrate:enrollments": "node server/migrations/fix-enrollments.js"
   },
   "dependencies": {
     "axios": "^1.13.2",

@@ -49,28 +49,24 @@ function Home() {
   }
  
   useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        setLoading(true)
-        const response = await axios.get('http://localhost:5000/getCourses')
-        setCourses(response.data)
-        setError(null)
-      } catch (err) {
-        setError('Failed to load courses')
-        console.error('Error fetching courses:', err)
-      } finally {
-        setLoading(false)
-      }
+  const fetchCourses = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get('http://localhost:5000/getCourses');
+      setCourses(response.data);
+      setError(null);
     } catch (err) {
-      setError('Failed to load enrolled courses');
-      console.error('Error fetching enrolled courses:', err);
+      setError('Failed to load courses');
+      console.error('Error fetching courses:', err);
       setCourses([]);
     } finally {
       setLoading(false);
     }
-    
-    fetchCourses()
-  }, [])
+  };
+
+  fetchCourses();
+}, []);
+
 
   useEffect(() => {
     // Apply font size on mount

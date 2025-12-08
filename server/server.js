@@ -303,17 +303,11 @@ app.get('/getCourses', async (req, res) => {
     // Find all courses
     const courses = await Course.find();
     
-    if (!courses || courses.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'No courses found'
-      });
-    }
-    
+    // Return 200 with empty array if no courses found (not an error)
     return res.status(200).json({
       success: true,
-      message: 'Courses retrieved successfully',
-      courses: courses
+      message: courses.length === 0 ? 'No courses found' : 'Courses retrieved successfully',
+      courses: courses || []
     });
 
   } catch (error) {
@@ -341,12 +335,15 @@ app.get('/getEnrolledCourses', async (req, res) => {
       .sort({ enrolledAt: -1 });
     
     // Transform to include enrollment data
-    const enrolledCourses = enrollments.map(enrollment => ({
-      ...enrollment.courseId.toObject(),
-      enrollmentId: enrollment._id,
-      enrolledAt: enrollment.enrolledAt,
-      enrollmentGrades: enrollment.grades
-    }));
+    // Filter out any enrollments with null/missing courseId (schema mismatch protection)
+    const enrolledCourses = enrollments
+      .filter(enrollment => enrollment.courseId != null) // Safety check for schema issues
+      .map(enrollment => ({
+        ...enrollment.courseId.toObject(),
+        enrollmentId: enrollment._id,
+        enrolledAt: enrollment.enrolledAt,
+        enrollmentGrades: enrollment.grades || []
+      }));
     
     res.status(200).json({
       success: true,
