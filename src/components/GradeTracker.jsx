@@ -467,8 +467,6 @@ const updateItemField = (areaIndex, itemIndex, field, value) => {
         onChange={(e) => setClassName(e.target.value)}
       />
       <br/>
-      
-      <button className="btn btn-primary m-1 add-area-btn" onClick={addGradedArea}>Add Area</button>
 
       <div className="graded-areas">
         {gradedAreas.length > 0 ? (
@@ -602,6 +600,9 @@ const updateItemField = (areaIndex, itemIndex, field, value) => {
           <p className="d-flex justify-content-center align-items-center">No graded areas added yet.</p>
         )}
       </div>
+
+      <button className="btn btn-primary m-1 add-area-btn" onClick={addGradedArea}>Add Area</button>
+
       <button className="btn btn-primary m-1 save-btn"
        onClick={(event) => handleSave(event)}
       
