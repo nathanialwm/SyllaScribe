@@ -13,6 +13,7 @@ dist-ssr
 *.local
 eslint.config.js
 .env
+.claude
 
 # Uploaded files (temporary)
 server/uploads/*
@@ -28,3 +29,4 @@ server/uploads/*
 *.njsproj
 *.sln
 *.sw?
+

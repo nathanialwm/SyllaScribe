@@ -4,14 +4,16 @@ import axios from 'axios'
 import { Sun, Moon } from 'lucide-react';
 import { useTheme } from './components/ThemeContext';
 import GradeTracker from "./components/GradeTracker";
+import SettingsModal from './components/SettingsModal';
 
 function Home() {
   const { theme, toggleTheme } = useTheme();
   const [user, setUser] = useState(null);
   const [courses, setCourses] = useState([])
   const [sectionTitle, setSectionTitle] = useState('Add New Class');
-   const [loading, setLoading] = useState(false) 
-  const [error, setError] = useState(null)  
+  const [loading, setLoading] = useState(false) 
+  const [error, setError] = useState(null)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);  
    useEffect(() => {
     const getUser = () => {
       try {
@@ -43,25 +45,48 @@ function Home() {
     window.location.reload();
   }
   function handleSettings() {
-    alert("Settings feature coming soon!");
+    setIsSettingsOpen(true);
   }
- 
-   useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        setLoading(true)
-        const response = await axios.get('http://localhost:5000/getCourses')
-        setCourses(response.data)
-        setError(null)
-      } catch (err) {
-        setError('Failed to load courses')
-        console.error('Error fetching courses:', err)
-      } finally {
-        setLoading(false)
-      }
+
+  // Fetch enrolled courses function (extracted so it can be called manually)
+  const fetchCourses = async () => {
+    if (!user || !user._id) {
+      setCourses([]);
+      return;
     }
-    
-    fetchCourses()
+
+    try {
+      setLoading(true);
+      const response = await axios.get('http://localhost:5000/getEnrolledCourses', {
+        params: { userId: user._id }
+      });
+
+      if (response.data.success) {
+        setCourses(response.data.courses || []);
+        setError(null);
+      } else {
+        setError(response.data.message || 'Failed to load courses');
+        setCourses([]);
+      }
+    } catch (err) {
+      setError('Failed to load enrolled courses');
+      console.error('Error fetching enrolled courses:', err);
+      setCourses([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCourses();
+  }, [user]);
+
+
+  useEffect(() => {
+    // Apply font size on mount
+    const fontSize = localStorage.getItem('fontSize') || 'medium';
+    document.documentElement.style.fontSize = 
+      fontSize === 'small' ? '14px' : fontSize === 'medium' ? '16px' : '18px';
   }, [])
   return (
     <>
@@ -86,12 +111,46 @@ function Home() {
         #add-class-header h5 {
           color: ${theme === 'light' ? '#000000' : '#ffffff'} !important;
         }
+        /* Classes section card styling */
+        #classes-card {
+          background-color: ${theme === 'light' ? '#ffffff' : '#1a1a1a'} !important;
+          border-color: ${theme === 'light' ? '#dee2e6' : '#404040'} !important;
+        }
+        #classes-card .card-body {
+          background-color: ${theme === 'light' ? '#ffffff' : '#1a1a1a'} !important;
+          color: ${theme === 'light' ? '#000000' : '#ffffff'} !important;
+        }
+        #classes-card .text-muted {
+          color: ${theme === 'light' ? '#6c757d' : '#adb5bd'} !important;
+        }
+        #classes-card .list-group-item {
+          background-color: ${theme === 'light' ? '#ffffff' : '#2d2d2d'} !important;
+          border-color: ${theme === 'light' ? '#dee2e6' : '#404040'} !important;
+          color: ${theme === 'light' ? '#000000' : '#ffffff'} !important;
+        }
+        #classes-card .list-group-item:hover {
+          background-color: ${theme === 'light' ? '#f8f9fa' : '#3a3a3a'} !important;
+        }
+        #classes-card .btn-outline-secondary {
+          color: ${theme === 'light' ? '#6c757d' : '#adb5bd'} !important;
+          border-color: ${theme === 'light' ? '#6c757d' : '#6c757d'} !important;
+        }
+        #classes-card .btn-outline-secondary:hover {
+          color: ${theme === 'light' ? '#ffffff' : '#000000'} !important;
+          background-color: ${theme === 'light' ? '#6c757d' : '#adb5bd'} !important;
+          border-color: ${theme === 'light' ? '#6c757d' : '#adb5bd'} !important;
+        }
+        #classes-card .alert-danger {
+          background-color: ${theme === 'light' ? '#f8d7da' : '#4a1f23'} !important;
+          border-color: ${theme === 'light' ? '#f5c2c7' : '#6a2a2f'} !important;
+          color: ${theme === 'light' ? '#842029' : '#ea868f'} !important;
+        }
       `}</style>
       <div className="app-root">
        <nav className="navbar navbar-expand-lg" style={{ backgroundColor: 'var(--primary)' }}>
       <div className="container-fluid px-3 px-md-4 px-lg-5">
         <a className="navbar-brand fw-bold fs-4" href="#" onClick={(e) => e.preventDefault()}>
-            Welcome to SyllaScribe {user && user.name ? user.name : 'Guest'}!
+            Welcome to SyllaScribe {user && user.name ? user.name : 'N/A'}!
         </a>
         <button 
           className="navbar-toggler" 
@@ -138,7 +197,7 @@ function Home() {
        <div className="row">
           {/* Left Section - Empty */}
           <div className="col-md-6">
-            <div className="card shadow-sm border">
+            <div id="classes-card" className="card shadow-sm border">
               <div id="classes-header" className="card-header" style={{ backgroundColor: theme === 'light' ? '#f8f9fa' : '#212529' }}>
                  <h5 className="mb-0">Classes ({courses.length})</h5>
                 {loading && (
@@ -149,7 +208,40 @@ function Home() {
               
               </div>
               <div className="card-body">
-                {/* Empty - Add content later */}
+                 {error && (
+            <div className="alert alert-danger">
+              {error}
+            </div>
+          )}
+          
+          {!loading && courses.length === 0 ? (
+            <div className="text-center py-4">
+              <p className="text-muted">No classes found</p>
+              <button className="btn btn-sm btn-outline-secondary"
+                    onClick={() =>setSectionTitle(`Add New Class`)}>
+                    Add new class
+                  </button>
+            </div>
+          ) : (
+            <div className="list-group">
+              {courses.map((course) => (
+                <div 
+                  key={course._id || course.courseId} 
+                  className="list-group-item d-flex justify-content-between align-items-center"
+                >
+                  <span>{course.title || course.ClassName || 'Untitled Course'}</span>
+                  <button className="btn btn-sm btn-outline-secondary"
+                    onClick={() =>setSectionTitle(`Viewing ${course.title || course.ClassName } `)}>
+                    View
+                  </button>
+                </div>
+              ))}
+              <button className="btn btn-sm btn-outline-secondary"
+                    onClick={() =>setSectionTitle(`Add New Class`)}>
+                    Add new class
+                  </button>
+            </div>
+          )}
               </div>
             </div>
           </div>
@@ -161,13 +253,13 @@ function Home() {
                 <h5 className="mb-0">{sectionTitle}</h5>
               </div>
               <div className="card-body">
-                <GradeTracker />
+                <GradeTracker onClassCreated={fetchCourses} />
               </div>
             </div>
           </div>
         </div>
       </main>
-      
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
     </>
   )

@@ -3,14 +3,15 @@ import "./GradeTracker.css";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { Trash2, Upload, FileText, X } from "lucide-react";
 import { aiAPI, coursesAPI, enrollmentsAPI } from '../services/api';
+import { set } from "mongoose";
+import axios from "axios";
 
 
-
-function GradeTracker() {
+function GradeTracker({ onClassCreated }) {
   const [className, setClassName] = useState("");
   const [gradedAreas, setGradedAreas] = useState([]);
   const [finalGrade, setFinalGrade] = useState(null);
-
+  const [UserFound, setUserFound] = useState(true);
   // Syllabus upload states
   const [syllabusFile, setSyllabusFile] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -234,6 +235,49 @@ const updateItemField = (areaIndex, itemIndex, field, value) => {
      ...prev,
      categories: prev.categories.filter((_, i) => i !== catIndex)
    }));
+ };
+ const handleSave = async (event) => {
+   event.preventDefault(); 
+    if((className.length === 0)){
+      alert("Please enter a class name before saving.");
+      return;
+    }
+    if(sessionStorage.getItem('currentUser') === null && localStorage.getItem('currentUser') === null){
+      alert("Please log in or sign up to save your grade tracker.");
+      setUserFound(false);
+    }
+    // Proceed with form submission (e.g., send data to server)
+    try {
+      const response = await axios.post('http://localhost:5000/createCourse', {
+        title: className
+      });
+      if (response.data.success) {
+        if(!UserFound){
+          sessionStorage.setItem('courseToSave', JSON.stringify(response.data.courseId, gradedAreas));
+        }
+        else{
+          try {
+          const response2 = await axios.post('http://localhost:5000/enrollCourse', { userId: JSON.parse(sessionStorage.getItem('currentUser') || localStorage.getItem('currentUser'))._id, courseId: response.data.courseId,grades: gradedAreas});
+          if (response2.data.success) {
+            alert("Course saved successfully!");
+            // Refresh the courses list in the parent component
+            if (onClassCreated) {
+              onClassCreated();
+            }
+          } else {
+            alert(response2.data.message || "Course save failed");
+          }
+          } catch (error) {
+      alert(error);
+    }
+      } 
+    }else {
+        alert(response.data.message || "Course save failed");
+      }
+    } catch (error) {
+      alert(error);
+    }
+  
  };
 
  const deleteParsedAssignment = (catIndex, assignIndex) => {
@@ -558,7 +602,10 @@ const updateItemField = (areaIndex, itemIndex, field, value) => {
           <p className="d-flex justify-content-center align-items-center">No graded areas added yet.</p>
         )}
       </div>
-      <button className="btn btn-primary m-1 save-btn">Save</button> {/* Placeholder for future save functionality. If logged in will send to database otherwise prompt login/signup. */}
+      <button className="btn btn-primary m-1 save-btn"
+       onClick={(event) => handleSave(event)}
+      
+      >Save</button> {/* Placeholder for future save functionality. If logged in will send to database otherwise prompt login/signup. */}
       <button className="btn btn-success m-1 calc-btn"
       onClick={calculateFinalGrade}
       >
