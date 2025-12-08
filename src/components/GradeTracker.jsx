@@ -7,7 +7,7 @@ import { set } from "mongoose";
 import axios from "axios";
 
 
-function GradeTracker() {
+function GradeTracker({ onClassCreated }) {
   const [className, setClassName] = useState("");
   const [gradedAreas, setGradedAreas] = useState([]);
   const [finalGrade, setFinalGrade] = useState(null);
@@ -259,7 +259,11 @@ const updateItemField = (areaIndex, itemIndex, field, value) => {
           try {
           const response2 = await axios.post('http://localhost:5000/enrollCourse', { userId: JSON.parse(sessionStorage.getItem('currentUser') || localStorage.getItem('currentUser'))._id, courseId: response.data.courseId,grades: gradedAreas});
           if (response2.data.success) {
-            alert("Course saved successfully!");  
+            alert("Course saved successfully!");
+            // Refresh the courses list in the parent component
+            if (onClassCreated) {
+              onClassCreated();
+            }
           } else {
             alert(response2.data.message || "Course save failed");
           }

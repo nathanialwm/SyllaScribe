@@ -46,20 +46,20 @@ function Home() {
     alert("Settings feature coming soon!");
   }
  
-   useEffect(() => {
+   // Fetch enrolled courses function (extracted so it can be called manually)
   const fetchEnrolledCourses = async () => {
     if (!user || !user._id) {
       setCourses([]);
       return;
     }
-    
+
     try {
       setLoading(true);
       // Use the new endpoint with userId
       const response = await axios.get(`http://localhost:5000/getEnrolledCourses`, {
         params: { userId: user._id }
     });
-      
+
       if (response.data.success) {
         setCourses(response.data.courses);
         setError(null);
@@ -75,9 +75,10 @@ function Home() {
       setLoading(false);
     }
   };
-  
-  fetchEnrolledCourses();
-}, [user]); 
+
+  useEffect(() => {
+    fetchEnrolledCourses();
+  }, [user]); 
   return (
     <>
       <style>{`
@@ -209,7 +210,7 @@ function Home() {
                 <h5 className="mb-0">{sectionTitle}</h5>
               </div>
               <div className="card-body">
-                <GradeTracker />
+                <GradeTracker onClassCreated={fetchEnrolledCourses} />
               </div>
             </div>
           </div>
