@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 export default function AuthModal({ mode, onClose, onSwitchMode }) {
   const [name, setName] = useState('');
@@ -162,6 +162,18 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
       }
     }
   };
+  // Reset forgot password mode when modal closes or mode changes
+  useEffect(() => {
+    if (!mode) {
+      setForgotPasswordMode(false);
+      setResetStep(1);
+      setResetEmail('');
+      setResetCode('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+    }
+  }, [mode]);
+
   if (!mode) return null;
 
   return (
@@ -207,17 +219,20 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
                         Send Verification Code
                       </button>
                       <div className="text-center">
-                        <button
-                          type="button"
-                          className="btn btn-link p-0"
-                          onClick={() => {
-                            setForgotPasswordMode(false);
-                            setResetStep(1);
-                            setResetEmail('');
-                          }}
-                        >
-                          Back to Login
-                        </button>
+                      <button
+                        type="button"
+                        className="btn btn-link p-0"
+                        onClick={() => {
+                          setForgotPasswordMode(false);
+                          setResetStep(1);
+                          setResetEmail('');
+                          setResetCode('');
+                          setNewPassword('');
+                          setConfirmNewPassword('');
+                        }}
+                      >
+                        Back to Login
+                      </button>
                       </div>
                     </form>
                   ) : (
@@ -344,6 +359,8 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
                         className="btn btn-link p-0"
                         onClick={() => {
                           setSuccessMessage('');
+                          setForgotPasswordMode(false);
+                          setResetStep(1);
                           onSwitchMode('signup');
                         }}
                       >
@@ -419,6 +436,8 @@ export default function AuthModal({ mode, onClose, onSwitchMode }) {
                         className="btn btn-link p-0"
                         onClick={() => {
                           setSuccessMessage('');
+                          setForgotPasswordMode(false);
+                          setResetStep(1);
                           onSwitchMode('login');
                         }}
                       >

@@ -16,11 +16,25 @@ export default function SettingsModal({ isOpen, onClose }) {
   });
   const [message, setMessage] = useState({ type: '', text: '' });
 
+  const getStoredUser = () => {
+    const fromLocal = localStorage.getItem('currentUser');
+    if (fromLocal) return JSON.parse(fromLocal);
+    const fromSession = sessionStorage.getItem('currentUser');
+    if (fromSession) return JSON.parse(fromSession);
+    return null;
+  };
+
   if (!isOpen) return null;
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
     setMessage({ type: '', text: '' });
+
+    const currentUser = getStoredUser();
+    if (!currentUser?.email) {
+      setMessage({ type: 'error', text: 'You must be logged in to change your password.' });
+      return;
+    }
 
     if (!currentPassword || !newPassword || !confirmNewPassword) {
       setMessage({ type: 'error', text: 'All fields are required' });
@@ -38,7 +52,6 @@ export default function SettingsModal({ isOpen, onClose }) {
     }
 
     try {
-      const currentUser = JSON.parse(localStorage.getItem('currentUser'));
       const response = await axios.post('http://localhost:5000/api/auth/changePassword', {
         email: currentUser.email,
         currentPassword,
@@ -54,7 +67,17 @@ export default function SettingsModal({ isOpen, onClose }) {
         setMessage({ type: 'error', text: response.data.message || 'Failed to change password' });
       }
     } catch (error) {
-      setMessage({ type: 'error', text: error.response?.data?.message || 'Error changing password' });
+      console.error('Change password error:', error);
+      // Handle different error scenarios
+      if (error.response?.data?.message) {
+        setMessage({ type: 'error', text: error.response.data.message });
+      } else if (error.response?.data?.error) {
+        setMessage({ type: 'error', text: error.response.data.error });
+      } else if (error.message) {
+        setMessage({ type: 'error', text: error.message });
+      } else {
+        setMessage({ type: 'error', text: 'Error changing password. Please try again.' });
+      }
     }
   };
 
@@ -73,7 +96,12 @@ export default function SettingsModal({ isOpen, onClose }) {
     }
 
     try {
-      const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+      const currentUser = getStoredUser();
+      if (!currentUser?.email) {
+        setMessage({ type: 'error', text: 'You must be logged in to change your email.' });
+        return;
+      }
+
       const response = await axios.post('http://localhost:5000/api/auth/changeEmail', {
         currentEmail: currentUser.email,
         newEmail: newEmail.trim(),
@@ -251,21 +279,6 @@ export default function SettingsModal({ isOpen, onClose }) {
 
               {activeTab === 'email' && (
                 <form onSubmit={handleChangeEmail}>
-                  <div className="mb-3">
-                    <label htmlFor="currentEmail" className="form-label">Current Email</label>
-                    <input
-                      type="email"
-                      className="form-control"
-                      id="currentEmail"
-                      value={JSON.parse(localStorage.getItem('currentUser'))?.email || ''}
-                      disabled
-                      style={{
-                        backgroundColor: theme === 'dark' ? '#212529' : '#e9ecef',
-                        color: theme === 'dark' ? '#ffffff' : '#000000',
-                        cursor: 'not-allowed'
-                      }}
-                    />
-                  </div>
                   <div className="mb-3">
                     <label htmlFor="newEmail" className="form-label">New Email</label>
                     <input
