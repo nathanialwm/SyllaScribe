@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-
+import Enrollment from './models/Enrollment.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -321,6 +321,155 @@ app.get('/getCourses', async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Server error while fetching courses',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+app.get('/getEnrolledCourses', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'userId is required'
+      });
+    }
+    
+    const enrollments = await Enrollment.find({ userId: userId })
+      .populate('courseId')
+      .sort({ enrolledAt: -1 });
+    
+    // Transform to include enrollment data
+    const enrolledCourses = enrollments.map(enrollment => ({
+      ...enrollment.courseId.toObject(),
+      enrollmentId: enrollment._id,
+      enrolledAt: enrollment.enrolledAt,
+      enrollmentGrades: enrollment.grades
+    }));
+    
+    res.status(200).json({
+      success: true,
+      courses: enrolledCourses
+    });
+    
+  } catch (error) {
+    console.error('Get enrolled courses error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching enrolled courses'
+    });
+  }
+});
+app.post('/createCourse', async (req, res) => {
+  try {
+    const { title } = req.body; 
+    // Validate required fields
+    if (!title) {
+      return res.status(400).json({
+        success: false,
+        message: 'ClassName is required'
+      });
+    }
+    // Create new course
+    const newCourse = new Course({
+      title,
+      courseId:  `COURSE-${Date.now()}-${Math.floor(Math.random() * 10000)}`
+    });
+    // Save to database
+    const savedCourse = await newCourse.save();
+    // Return success response  
+    res.status(201).json({
+      success: true,
+      message: 'Course created successfully',
+      courseId: savedCourse._id
+    });
+  } catch (error) {
+    console.error('Error creating course:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while creating course',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+
+app.post('/enrollCourse', async (req, res) => {
+  try {
+    const { userId, courseId, grades } = req.body;  
+    
+    // Validate required fields
+    if (!userId || !courseId) {
+      return res.status(400).json({
+        success: false,
+        message: 'userId and courseId are required'
+      });
+    }
+    
+    // Find user and course
+    const user = await User.findById(userId);
+    const course = await Course.findById(courseId); 
+    
+    if (!user || !course) {
+      return res.status(404).json({
+        success: false,
+        message: 'User or Course not found'
+      });
+    }
+    
+    // Check if enrollment already exists
+    const existingEnrollment = await Enrollment.findOne({
+      userId: userId,
+      courseId: courseId
+    });
+    
+    if (existingEnrollment) {
+      return res.status(400).json({
+        success: false,
+        message: 'User is already enrolled in this course'
+      });
+    }
+    
+   
+    const transformedGrades = [];
+    
+    if (grades && Array.isArray(grades)) {
+      grades.forEach((area, areaIndex) => {
+        if (area.items && Array.isArray(area.items)) {
+          area.items.forEach((item, itemIndex) => {
+            transformedGrades.push({
+              assignmentId: `${areaIndex}-${itemIndex}-${Date.now()}`,
+              name: item.name || `Assignment ${itemIndex + 1}`,
+              grade: parseFloat(item.grade) || 0,
+              weight: parseFloat(area.weight) || 0
+            });
+          });
+        }
+      });
+    }
+    
+    // Create new enrollment
+    const enrollment = new Enrollment({
+      enrollmentID: `ENROLL-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+      userId: userId,
+      courseId: courseId,
+      grades: transformedGrades
+    });
+    
+    await enrollment.save();
+    
+    // Return success response
+    res.status(200).json({
+      success: true,
+      message: 'User enrolled in course successfully',
+      enrollmentId: enrollment._id
+    });
+  } catch (error) {
+    console.error('Error enrolling user in course:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while enrolling user in course', 
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }

@@ -61,6 +61,12 @@ function Home() {
       } finally {
         setLoading(false)
       }
+    } catch (err) {
+      setError('Failed to load enrolled courses');
+      console.error('Error fetching enrolled courses:', err);
+      setCourses([]);
+    } finally {
+      setLoading(false);
     }
     
     fetchCourses()
@@ -100,7 +106,7 @@ function Home() {
        <nav className="navbar navbar-expand-lg" style={{ backgroundColor: 'var(--primary)' }}>
       <div className="container-fluid px-3 px-md-4 px-lg-5">
         <a className="navbar-brand fw-bold fs-4" href="#" onClick={(e) => e.preventDefault()}>
-            Welcome to SyllaScribe {user && user.name ? user.name : 'Guest'}!
+            Welcome to SyllaScribe {user && user.name ? user.name : 'N/A'}!
         </a>
         <button 
           className="navbar-toggler" 
@@ -158,7 +164,40 @@ function Home() {
               
               </div>
               <div className="card-body">
-                {/* Empty - Add content later */}
+                 {error && (
+            <div className="alert alert-danger">
+              {error}
+            </div>
+          )}
+          
+          {!loading && courses.length === 0 ? (
+            <div className="text-center py-4">
+              <p className="text-muted">No classes found</p>
+              <button className="btn btn-sm btn-outline-secondary"
+                    onClick={() =>setSectionTitle(`Add New Class`)}>
+                    Add new class
+                  </button>
+            </div>
+          ) : (
+            <div className="list-group">
+              {courses.map((course) => (
+                <div 
+                  key={course._id || course.courseId} 
+                  className="list-group-item d-flex justify-content-between align-items-center"
+                >
+                  <span>{course.title || course.ClassName || 'Untitled Course'}</span>
+                  <button className="btn btn-sm btn-outline-secondary"
+                    onClick={() =>setSectionTitle(`Viewing ${course.title || course.ClassName } `)}>
+                    View
+                  </button>
+                </div>
+              ))}
+              <button className="btn btn-sm btn-outline-secondary"
+                    onClick={() =>setSectionTitle(`Add New Class`)}>
+                    Add new class
+                  </button>
+            </div>
+          )}
               </div>
             </div>
           </div>
@@ -170,7 +209,7 @@ function Home() {
                 <h5 className="mb-0">{sectionTitle}</h5>
               </div>
               <div className="card-body">
-                <GradeTracker />
+                <GradeTracker onClassCreated={fetchEnrolledCourses} />
               </div>
             </div>
           </div>
