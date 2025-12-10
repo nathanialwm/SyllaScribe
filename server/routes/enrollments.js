@@ -93,6 +93,36 @@ router.post('/:id/grades', authenticateToken, async (req, res) => {
   }
 });
 
+// Update all grades for an enrollment (bulk update)
+router.put('/:id/grades', authenticateToken, async (req, res) => {
+  try {
+    const { grades } = req.body;
+
+    if (!Array.isArray(grades)) {
+      return res.status(400).json({ error: 'Grades must be an array' });
+    }
+
+    const enrollment = await Enrollment.findById(req.params.id);
+
+    if (!enrollment) {
+      return res.status(404).json({ error: 'Enrollment not found' });
+    }
+
+    // Verify user owns this enrollment
+    if (enrollment.userId.toString() !== req.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    enrollment.grades = grades;
+    await enrollment.save();
+
+    res.json(enrollment);
+  } catch (error) {
+    console.error('Bulk update grades error:', error);
+    res.status(500).json({ error: 'Failed to update grades' });
+  }
+});
+
 // Delete enrollment
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
