@@ -32,24 +32,57 @@ function UserGradeTracker({ selectedCourseData }) {
     setClassName(selectedCourseData.title || "");
     
   
-    const gradesData = selectedCourseData.enrolledGrades || selectedCourseData.grades;
+    const gradesData = selectedCourseData.enrollmentGrades || selectedCourseData.enrolledGrades || selectedCourseData.grades;
     
     
     if (gradesData && Array.isArray(gradesData)) {
       
       
   
-      const formattedAreas = gradesData.map(gradeItem => ({
-        name: gradeItem.name || "Assignment",
-        weight: gradeItem.weight?.toString() || "",
-        isOpen: true,
-        items: [{
-          name: gradeItem.name || "",
+      // Group grades by category (extracted from assignment names)
+      // Assignment names are stored as "CategoryName|AssignmentName" to preserve category info
+      const groupedByCategory = {};
+
+      gradesData.forEach(gradeItem => {
+        const itemName = gradeItem.name || "";
+        const weight = gradeItem.weight || 0;
+
+        // Parse category name from assignment name (format: "CategoryName|AssignmentName")
+        let categoryName = `Category ${weight}%`; // Default
+        let assignmentName = itemName;
+
+        if (itemName.includes('|')) {
+          const parts = itemName.split('|');
+          categoryName = parts[0];
+          assignmentName = parts.slice(1).join('|'); // Handle pipes in assignment names
+        }
+
+        // Create unique key combining category name and weight
+        const key = `${categoryName}_${weight}`;
+
+        if (!groupedByCategory[key]) {
+          groupedByCategory[key] = {
+            name: categoryName,
+            weight: weight,
+            items: []
+          };
+        }
+
+        groupedByCategory[key].items.push({
+          name: assignmentName,
           grade: gradeItem.grade?.toString() || "",
           participation: null,
           date: "",
           status: "not-submitted"
-        }]
+        });
+      });
+
+      // Convert groups to areas
+      const formattedAreas = Object.values(groupedByCategory).map(group => ({
+        name: group.name,
+        weight: group.weight.toString(),
+        isOpen: true,
+        items: group.items
       }));
       
 
@@ -61,6 +94,14 @@ function UserGradeTracker({ selectedCourseData }) {
     setFinalGrade(null);
   }
 }, [selectedCourseData]);
+
+  // Auto-calculate grade when gradedAreas change
+  useEffect(() => {
+    if (gradedAreas.length > 0) {
+      calculateFinalGrade();
+    }
+  }, [gradedAreas]);
+
   const UpdateAreaName = (index, value) => {
     setGradedAreas(prev =>
       prev.map((area, i) => (i === index ? { ...area, name: value } : area))
@@ -314,54 +355,114 @@ const updateItemField = (areaIndex, itemIndex, field, value) => {
 
  const handleSave = async (event) => {
    event.preventDefault();
-    if((className.length === 0)){
-      alert("Please enter a class name before saving.");
-      return;
-    }
-    if(sessionStorage.getItem('currentUser') === null && localStorage.getItem('currentUser') === null){
-      alert("Please log in or sign up to save your grade tracker.");
-      setUserFound(false);
-    }
-    if (selectedCourseData){
-      
-      handleDeleteCourse();
-    }
 
+   if (className.length === 0) {
+     alert("Please enter a class name before saving.");
+     return;
+   }
 
+   const currentUser = JSON.parse(
+     sessionStorage.getItem('currentUser') || localStorage.getItem('currentUser')
+   );
 
+   if (!currentUser) {
+     alert("Please log in or sign up to save your grade tracker.");
+     setUserFound(false);
+     return;
+   }
 
+   try {
+     if (selectedCourseData) {
+       // UPDATE MODE: Delete old enrollment and create new one with updated data
+       // (Using legacy endpoints since the app doesn't use JWT authentication)
 
+       // First, delete the old enrollment and course
+       try {
+         await axios.delete(`http://localhost:5000/deleteEnrollment/${selectedCourseData.enrollmentId}`);
+         await axios.delete(`http://localhost:5000/deleteCourseByCustomId/${selectedCourseData.courseId}`);
+       } catch (err) {
+         console.error('Error deleting old course/enrollment:', err);
+         throw new Error('Failed to delete old course data');
+       }
 
+       // Then create new course with updated title
+       const courseResponse = await axios.post('http://localhost:5000/createCourse', {
+         title: className
+       });
 
-    // Proceed with form submission (e.g., send data to server)
-    try {
-      const response = await axios.post('http://localhost:5000/createCourse', {
-        title: className
-      });
-      if (response.data.success) {
-        if(!UserFound){
-          sessionStorage.setItem('courseToSave', JSON.stringify(response.data.courseId, gradedAreas));
-        }
-        else{
-          try {
-          const response2 = await axios.post('http://localhost:5000/enrollCourse', { userId: JSON.parse(sessionStorage.getItem('currentUser') || localStorage.getItem('currentUser'))._id, courseId: response.data.courseId,grades: gradedAreas});
-          if (response2.data.success) {
-            alert("Course saved successfully!"); 
-            window.location.reload(); 
-          } else {
-            alert(response2.data.message || "Course save failed");
-          }
-          } catch (error) {
-      alert(error);
-    }
-      } 
-    }else {
-        alert(response.data.message || "Course save failed");
-      }
-    } catch (error) {
-      alert(error);
-    }
-  
+       if (!courseResponse.data.success) {
+         throw new Error(courseResponse.data.message || 'Failed to create updated course');
+       }
+
+       // Encode category names in assignment names for storage
+       const gradedAreasToSave = gradedAreas.map(area => ({
+         ...area,
+         items: area.items.map(item => ({
+           ...item,
+           name: `${area.name}|${item.name}` // Store as "CategoryName|AssignmentName"
+         }))
+       }));
+
+       // Finally, create new enrollment with updated grades
+       const enrollResponse = await axios.post('http://localhost:5000/enrollCourse', {
+         userId: currentUser._id,
+         courseId: courseResponse.data.courseId,
+         grades: gradedAreasToSave
+       });
+
+       if (enrollResponse.data.success) {
+         alert("Course updated successfully!");
+         window.location.reload();
+       } else {
+         throw new Error(enrollResponse.data.message || 'Failed to update enrollment');
+       }
+
+     } else {
+       // CREATE MODE: Create new course and enrollment
+       const response = await axios.post('http://localhost:5000/createCourse', {
+         title: className
+       });
+
+       if (response.data.success) {
+         // Encode category names in assignment names for storage
+         const gradedAreasToSave = gradedAreas.map(area => ({
+           ...area,
+           items: area.items.map(item => ({
+             ...item,
+             name: `${area.name}|${item.name}` // Store as "CategoryName|AssignmentName"
+           }))
+         }));
+
+         if (!UserFound) {
+           sessionStorage.setItem('courseToSave', JSON.stringify({
+             courseId: response.data.courseId,
+             grades: gradedAreasToSave
+           }));
+         } else {
+           const response2 = await axios.post(
+             'http://localhost:5000/enrollCourse',
+             {
+               userId: currentUser._id,
+               courseId: response.data.courseId,
+               grades: gradedAreasToSave
+             }
+           );
+
+           if (response2.data.success) {
+             alert("Course saved successfully!");
+             window.location.reload();
+           } else {
+             alert(response2.data.message || "Course save failed");
+           }
+         }
+       } else {
+         alert(response.data.message || "Course save failed");
+       }
+     }
+   } catch (error) {
+     console.error('Save error:', error);
+     alert("Error saving course: " + (error.response?.data?.message || error.message || error));
+   }
  };
 
  const deleteParsedAssignment = (catIndex, assignIndex) => {
@@ -552,6 +653,60 @@ const updateItemField = (areaIndex, itemIndex, field, value) => {
       <br/>
       
       <button className="btn btn-primary m-1 add-area-btn" onClick={addGradedArea}>Add Area</button>
+
+      {/* Grade Breakdown Summary */}
+      {gradedAreas.length > 0 && (
+        <div className="card mb-3 mt-3">
+          <div className="card-header bg-info text-white">
+            <h6 className="mb-0">Grade Breakdown Summary</h6>
+          </div>
+          <div className="card-body">
+            <table className="table table-sm table-striped">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Weight</th>
+                  <th>Assignments</th>
+                  <th>Average</th>
+                  <th>Contribution</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gradedAreas.map((area, index) => {
+                  const weight = parseFloat(area.weight) || 0;
+                  const validGrades = area.items
+                    .map(item => parseFloat(item.grade))
+                    .filter(g => !isNaN(g) && g > 0);
+                  const average = validGrades.length > 0
+                    ? validGrades.reduce((a, b) => a + b, 0) / validGrades.length
+                    : 0;
+                  const contribution = (average * weight) / 100;
+
+                  return (
+                    <tr key={index}>
+                      <td><strong>{area.name || 'Unnamed Category'}</strong></td>
+                      <td>{weight}%</td>
+                      <td>{area.items.length} ({validGrades.length} graded)</td>
+                      <td>{average.toFixed(2)}%</td>
+                      <td className="text-success"><strong>{contribution.toFixed(2)}%</strong></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div className="d-flex justify-content-between align-items-center mt-2 pt-2 border-top">
+              <strong>Total Weight:</strong>
+              <span className={
+                gradedAreas.reduce((sum, area) => sum + (parseFloat(area.weight) || 0), 0) === 100
+                  ? 'text-success'
+                  : 'text-warning'
+              }>
+                {gradedAreas.reduce((sum, area) => sum + (parseFloat(area.weight) || 0), 0).toFixed(0)}%
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="graded-areas">
         {gradedAreas.length > 0 ? (

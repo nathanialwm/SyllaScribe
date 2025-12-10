@@ -12,9 +12,10 @@ function Home() {
   const [user, setUser] = useState(null);
   const [courses, setCourses] = useState([])
   const [sectionTitle, setSectionTitle] = useState('Add New Class');
-  const [loading, setLoading] = useState(false) 
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);  
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [selectedCourseData, setSelectedCourseData] = useState(null);  
    useEffect(() => {
     const getUser = () => {
       try {
@@ -219,7 +220,10 @@ function Home() {
             <div className="text-center py-4">
               <p className="text-muted">No classes found</p>
               <button className="btn btn-sm btn-outline-secondary"
-                    onClick={() =>setSectionTitle(`Add New Class`)}>
+                    onClick={() => {
+                      setSectionTitle('Add New Class');
+                      setSelectedCourseData(null);
+                    }}>
                     Add new class
                   </button>
             </div>
@@ -232,13 +236,19 @@ function Home() {
                 >
                   <span>{course.title || course.ClassName || 'Untitled Course'}</span>
                   <button className="btn btn-sm btn-outline-secondary"
-                    onClick={() =>setSectionTitle(`Viewing ${course.title || course.ClassName } `)}>
+                    onClick={() => {
+                      setSectionTitle(`Viewing ${course.title || course.ClassName}`);
+                      setSelectedCourseData(course);
+                    }}>
                     View
                   </button>
                 </div>
               ))}
               <button className="btn btn-sm btn-outline-secondary"
-                    onClick={() =>setSectionTitle(`Add New Class`)}>
+                    onClick={() => {
+                      setSectionTitle('Add New Class');
+                      setSelectedCourseData(null);
+                    }}>
                     Add new class
                   </button>
             </div>
@@ -254,9 +264,11 @@ function Home() {
                 <h5 className="mb-0">{sectionTitle}</h5>
               </div>
               <div className="card-body">
-                <UserGradeTracker 
-                selectedCourseData={selectedCourseData}
-                />
+                {selectedCourseData ? (
+                  <UserGradeTracker selectedCourseData={selectedCourseData} />
+                ) : (
+                  <GradeTracker onClassCreated={fetchCourses} />
+                )}
               </div>
             </div>
           </div>
